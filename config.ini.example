@@ -1,0 +1,26 @@
+# keep it simple and secure:
+#
+# This ONLY works with SMTP and TLS
+# This ONLY works with IMAP and SSL
+#
+# If your system does not support encrypted protocols, your problem is
+# not yet the lack of monitoring!
+
+[gmx.de]
+
+login       = test@gmx.de
+email       = test@gmx.de
+password    = passw0rd
+smtp_server = smtp.gmx.net
+imap_server = imap.gmx.net
+
+[yahoo.com]
+
+login       = test@yahoo.com
+email       = test@yahoo.com
+password    = passw0rd
+smtp_server = smtp.yahoo.com
+imap_server = imap.yahoo.com
+
+
+
