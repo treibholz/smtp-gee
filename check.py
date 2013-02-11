@@ -6,7 +6,9 @@ import ConfigParser
 import time
 import hashlib
 import socket
+import imaplib
 from email.mime.text import MIMEText
+from email.parser import Parser
 
 
 class Account(object): # {{{
@@ -62,6 +64,43 @@ Cheers.
 
     # }}}
 
+    def check(self, check_id): # {{{
+        """docstring for check"""
+
+        m = imaplib.IMAP4_SSL(self.imap_server)
+
+        m.login(self.login, self.password)
+        m.select()
+
+        data=['']
+
+        count = 0
+        # Wait until the message is there.
+        while data == ['']:
+            typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+            time.sleep(1)
+            count += 1
+
+        print count
+
+        for num in data[0].split():
+            typ, data = m.fetch(num, '(RFC822)')
+            # print typ
+            msg = data[0][1]
+
+        headers = Parser().parsestr(msg)
+
+        for h in headers.get_all('received'):
+            print "---"
+            print h.strip('\n')
+
+        # deleting should be more sophisticated, for debugging...
+        #m.store(num, '+FLAGS', '\\Deleted')
+        m.close()
+        m.logout()
+    # }}}
+
+
 # }}}
 
 
@@ -84,8 +123,10 @@ if __name__ == "__main__":
         a[s].email       = c.get(s, 'email')
 
 
-    r=a['gmx.de'].send(a['mail.com'])
-
+    r = a['web.de'].send(a['hotmail.com'])
     print r
+    a['hotmail.com'].check(r)
+
+
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
