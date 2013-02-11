@@ -1,7 +1,7 @@
 Super Mail Test Professional Gold Enterprise Edition
 ====================================================
 
-SMTP-GEE is a tool to test mail.
+SMTP-GEE is a tool to test mail. (WiP)
 
 
 License
