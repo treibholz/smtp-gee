@@ -7,6 +7,8 @@ import time
 import hashlib
 import socket
 import imaplib
+import argparse
+
 from email.mime.text import MIMEText
 from email.parser import Parser
 
@@ -106,9 +108,28 @@ Cheers.
 
 if __name__ == "__main__":
 
+    # Parse Options
+    parser = argparse.ArgumentParser(description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox')
+
+#    parser.add_argument('integers', metavar='N', type=int, nargs='+',
+#                   help='an integer for the accumulator')
+
+    parser.add_argument('--from', dest='sender', action='store', required=True,
+                   help='The account to send the message')
+    parser.add_argument('--rcpt', dest='rcpt', action='store', required=True,
+                   help='The account to receive the message')
+
+    parser.add_argument('--config', default='config.ini', dest='config_file', action='store', required=False,
+                   help='alternate config-file')
+
+
+
+    args = parser.parse_args()
+
+    # Read Config
 
     c = ConfigParser.ConfigParser()
-    c.read('config.ini')
+    c.read(args.config_file)
 
     a={}
 
@@ -123,9 +144,9 @@ if __name__ == "__main__":
         a[s].email       = c.get(s, 'email')
 
 
-    r = a['web.de'].send(a['hotmail.com'])
+    r = a[args.sender].send(a[args.rcpt])
     print r
-    a['hotmail.com'].check(r)
+    a[args.rcpt].check(r)
 
 
 
