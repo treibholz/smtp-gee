@@ -24,6 +24,8 @@ class Account(object): # {{{
         self.imap_server    =   imap_server
         self.email          =   login
 
+        self.__debug        =   False
+
     # }}}
 
     def send(self, recipient): # {{{
@@ -83,7 +85,7 @@ Cheers.
             time.sleep(1)
             count += 1
 
-        print count
+        # print count
 
         for num in data[0].split():
             typ, data = m.fetch(num, '(RFC822)')
@@ -92,9 +94,10 @@ Cheers.
 
         headers = Parser().parsestr(msg)
 
-        for h in headers.get_all('received'):
-            print "---"
-            print h.strip('\n')
+        if self.__debug:
+            for h in headers.get_all('received'):
+                print "---"
+                print h.strip('\n')
 
         # deleting should be more sophisticated, for debugging...
         #m.store(num, '+FLAGS', '\\Deleted')
@@ -102,26 +105,87 @@ Cheers.
         m.logout()
     # }}}
 
+    def set_debug(self, debug): # {{{
+        """docstring for set_debug"""
+        self.__debug = debug
+
+    # }}}
 
 # }}}
 
+class Stopwatch(object): # {{{
+    """docstring for Stopwatch"""
+    def __init__(self, debug=False):
+        super(Stopwatch, self).__init__()
+        self.__debug = debug
+        self.__start   = -1
+        self.counter = 0
+
+    def start(self):
+        """docstring for start"""
+        self.__start = time.time()
+
+    def stop(self):
+        """docstring for stop"""
+        self.counter += time.time() - self.__start
+        self.__start  = -1
+
+# }}}
 
 if __name__ == "__main__":
 
     # Parse Options
-    parser = argparse.ArgumentParser(description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox')
+    parser = argparse.ArgumentParser(
+        description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox',
+        epilog = "Because e-mail is a realtime-medium and you know it!")
 
 #    parser.add_argument('integers', metavar='N', type=int, nargs='+',
 #                   help='an integer for the accumulator')
 
-    parser.add_argument('--from', dest='sender', action='store', required=True,
-                   help='The account to send the message')
-    parser.add_argument('--rcpt', dest='rcpt', action='store', required=True,
-                   help='The account to receive the message')
+    parser.add_argument('--from', dest='sender', action='store',
+                    required=True,
+                    help='The account to send the message')
 
-    parser.add_argument('--config', default='config.ini', dest='config_file', action='store', required=False,
-                   help='alternate config-file')
+    parser.add_argument('--rcpt', dest='rcpt', action='store',
+                    required=True,
+                    help='The account to receive the message')
 
+    parser.add_argument('--nagios', dest='nagios', action='store_true',
+                    required=False,
+                    default=False,
+                    help='output in Nagios mode')
+
+    parser.add_argument('--smtp_warn', dest='smtp_warn', action='store',
+                    required=False,
+                    default=15,
+                    help='warning threshold in sec to send the mail. Default: %(default)s')
+
+    parser.add_argument('--smtp_crit', dest='smtp_crit', action='store',
+                    required=False,
+                    default=30,
+                    help='critical threshold in sec to send the mail. Default: %(default)s')
+
+    parser.add_argument('--imap_warn', dest='imap_warn', action='store',
+                    required=False,
+                    default=120,
+                    help='warning threshold in sec until the mail appears in the INBOX. Default: %(default)s')
+
+    parser.add_argument('--imap_crit', dest='imap_crit', action='store',
+                    required=False,
+                    default=300,
+                    help='critical threshold in sec until the mail appears in the INBOX. Default: %(default)s')
+
+
+
+    parser.add_argument('--debug', dest='debug', action='store_true',
+                    required=False,
+                    default=False,
+                    help='Debug mode')
+
+    parser.add_argument('--config',dest='config_file', action='store',
+                    default='config.ini', 
+                    required=False,
+                    help='alternate config-file')
 
 
     args = parser.parse_args()
@@ -136,6 +200,8 @@ if __name__ == "__main__":
     for s in c.sections():
         a[s] = Account(s)
 
+        a[s].set_debug(args.debug)
+
         # This has to be more easy...
         a[s].smtp_server = c.get(s, 'smtp_server')
         a[s].imap_server = c.get(s, 'imap_server')
@@ -143,11 +209,38 @@ if __name__ == "__main__":
         a[s].login       = c.get(s, 'login')
         a[s].email       = c.get(s, 'email')
 
+    smtp_time = Stopwatch()
+    imap_time = Stopwatch()
 
+    smtp_time.start()
     r = a[args.sender].send(a[args.rcpt])
-    print r
-    a[args.rcpt].check(r)
+    smtp_time.stop()
 
+    if args.debug:
+        print r
+
+    imap_time.start()
+    a[args.rcpt].check(r)
+    imap_time.stop()
+
+    if not args.nagios:
+
+        print smtp_time.counter
+        print imap_time.counter
+
+    else:
+
+        nagios_template="OK: sent in %s sec, received in %s sec|smtp=%s;%s;%s imap=%s;%s;%s"
+        print nagios_template % (
+            smtp_time.counter,
+            imap_time.counter,
+            smtp_time.counter,
+            args.smtp_warn,
+            args.smtp_crit,
+            imap_time.counter,
+            args.imap_warn,
+            args.imap_crit,
+        )
 
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
