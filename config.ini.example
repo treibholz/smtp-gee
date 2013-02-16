@@ -1,6 +1,6 @@
 # keep it simple and secure:
 #
-# This ONLY works with SMTP and TLS
+# This ONLY works with SMTP and TLS, or SMTP-over-SSL
 # This ONLY works with IMAP and SSL
 #
 # If your system does not support encrypted protocols, your problem is
@@ -16,11 +16,12 @@ imap_server = imap.gmx.net
 
 [yahoo.com]
 
-login       = test@yahoo.com
-email       = test@yahoo.com
-password    = passw0rd
-smtp_server = smtp.yahoo.com
-imap_server = imap.yahoo.com
+login           = test@yahoo.com
+email           = test@yahoo.com
+password        = passw0rd
+smtp_server     = smtp.yahoo.com
+smtp_over_ssl   = True
+imap_server     = imap.yahoo.com
 
 
 

@@ -15,7 +15,7 @@ from email.parser import Parser
 
 class Account(object): # {{{
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost"): # {{{
+    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False): # {{{
         super(Account, self).__init__()
         self.name           =   name
         self.login          =   login
@@ -25,6 +25,7 @@ class Account(object): # {{{
         self.email          =   login
 
         self.__debug        =   False
+        self.smtp_over_ssl  =   smtp_over_ssl
 
     # }}}
 
@@ -56,9 +57,15 @@ Cheers.
         msg['To']       =   recipient.email
         msg['Subject']  =   "[SMTP-GEE] |%s" % (test_id, )
 
-        s = smtplib.SMTP( self.smtp_server )
+        if self.smtp_over_ssl:
+            if self.__debug: print "SMTP-over-SSL is used"
+            s = smtplib.SMTP_SSL( self.smtp_server )
+        else:
+            if self.__debug: print "SMTP is used"
+            s = smtplib.SMTP( self.smtp_server )
+            s.starttls()
+
         #s.set_debuglevel(2)
-        s.starttls()
         s.login(self.login, self.password )
 
         s.sendmail( self.email, recipient.email, msg.as_string() )
@@ -208,6 +215,11 @@ if __name__ == "__main__":
         a[s].password    = c.get(s, 'password')
         a[s].login       = c.get(s, 'login')
         a[s].email       = c.get(s, 'email')
+
+        try:
+            a[s].smtp_over_ssl = c.get(s, 'smtp_over_ssl')
+        except:
+            pass
 
     smtp_time = Stopwatch()
     imap_time = Stopwatch()
