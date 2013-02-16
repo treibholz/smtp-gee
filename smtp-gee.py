@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
     else:
 
-        nagios_template="OK: sent in %s sec, received in %s sec|smtp=%s;%s;%s imap=%s;%s;%s"
+        nagios_template="OK: sent in %s sec, received in %s sec|smtp=%s;%s;%s, imap=%s;%s;%s"
         print nagios_template % (
             smtp_time.counter,
             imap_time.counter,
