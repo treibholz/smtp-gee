@@ -238,7 +238,7 @@ if __name__ == "__main__":
     if not args.nagios:
 
         print "SMTP, time to send the mail: %s sec." % smtp_time.counter
-        print "IMAP, time until the mail appeard in the destination INBOX: %s sec." % imap_time.counter
+        print "IMAP, time until the mail appeared in the destination INBOX: %s sec." % imap_time.counter
 
     else:
 
