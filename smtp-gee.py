@@ -190,7 +190,7 @@ if __name__ == "__main__":
                     help='Debug mode')
 
     parser.add_argument('--config',dest='config_file', action='store',
-                    default='config.ini', 
+                    default='config.ini',
                     required=False,
                     help='alternate config-file')
 
@@ -237,8 +237,8 @@ if __name__ == "__main__":
 
     if not args.nagios:
 
-        print smtp_time.counter
-        print imap_time.counter
+        print "SMTP, time to send the mail: %s sec." % smtp_time.counter
+        print "IMAP, time until the mail appeard in the destination INBOX: %s sec." % imap_time.counter
 
     else:
 
