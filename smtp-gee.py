@@ -8,6 +8,7 @@ import hashlib
 import socket
 import imaplib
 import argparse
+import sys
 
 from email.mime.text import MIMEText
 from email.parser import Parser
@@ -141,6 +142,10 @@ class Stopwatch(object): # {{{
 
 if __name__ == "__main__":
 
+    returncode=4
+
+    nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
+
     # Parse Options
     parser = argparse.ArgumentParser(
         description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox',
@@ -165,21 +170,25 @@ if __name__ == "__main__":
     parser.add_argument('--smtp_warn', dest='smtp_warn', action='store',
                     required=False,
                     default=15,
+                    type=int,
                     help='warning threshold in sec to send the mail. Default: %(default)s')
 
     parser.add_argument('--smtp_crit', dest='smtp_crit', action='store',
                     required=False,
                     default=30,
+                    type=int,
                     help='critical threshold in sec to send the mail. Default: %(default)s')
 
     parser.add_argument('--imap_warn', dest='imap_warn', action='store',
                     required=False,
                     default=120,
+                    type=int,
                     help='warning threshold in sec until the mail appears in the INBOX. Default: %(default)s')
 
     parser.add_argument('--imap_crit', dest='imap_crit', action='store',
                     required=False,
                     default=300,
+                    type=int,
                     help='critical threshold in sec until the mail appears in the INBOX. Default: %(default)s')
 
 
@@ -242,8 +251,18 @@ if __name__ == "__main__":
 
     else:
 
-        nagios_template="OK: sent in %s sec, received in %s sec|smtp=%s;%s;%s, imap=%s;%s;%s"
+        # this could be beautified...
+        if   ((smtp_time.counter >= args.smtp_crit) or (imap_time.counter >= args.imap_crit)):
+            returncode = 2
+        elif ((smtp_time.counter >= args.smtp_warn) or (imap_time.counter >= args.imap_warn)):
+            returncode = 1
+        else:
+            returncode = 0
+
+
+        nagios_template="%s: sent in %s sec, received in %s sec|smtp=%s;%s;%s, imap=%s;%s;%s"
         print nagios_template % (
+            nagios_code[returncode],
             smtp_time.counter,
             imap_time.counter,
             smtp_time.counter,
@@ -254,5 +273,6 @@ if __name__ == "__main__":
             args.imap_crit,
         )
 
+        sys.exit(returncode)
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
