@@ -191,6 +191,19 @@ if __name__ == "__main__":
                     type=int,
                     help='critical threshold in sec until the mail appears in the INBOX. Default: %(default)s')
 
+    parser.add_argument('--imap_timeout', dest='imap_timeout', action='store',
+                    required=False,
+                    default=600,
+                    type=int,
+                    help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
+
+    parser.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
+                    required=False,
+                    default=60,
+                    type=int,
+                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
+
+
 
 
     parser.add_argument('--debug', dest='debug', action='store_true',
