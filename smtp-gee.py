@@ -58,21 +58,26 @@ Cheers.
         msg['To']       =   recipient.email
         msg['Subject']  =   "[SMTP-GEE] |%s" % (test_id, )
 
-        if self.smtp_over_ssl:
-            if self.__debug: print "SMTP-over-SSL is used"
-            s = smtplib.SMTP_SSL( self.smtp_server )
-        else:
-            if self.__debug: print "SMTP is used"
-            s = smtplib.SMTP( self.smtp_server )
-            s.starttls()
+        try:
+            if self.smtp_over_ssl:
+                if self.__debug: print "SMTP-over-SSL is used"
+                s = smtplib.SMTP_SSL( self.smtp_server )
+            else:
+                if self.__debug: print "SMTP is used"
+                s = smtplib.SMTP( self.smtp_server )
+                s.starttls()
 
-        #s.set_debuglevel(2)
-        s.login(self.login, self.password )
+            #s.set_debuglevel(2)
+            s.login(self.login, self.password )
 
-        s.sendmail( self.email, recipient.email, msg.as_string() )
-        s.quit()
+            s.sendmail( self.email, recipient.email, msg.as_string() )
+            s.quit()
 
-        return test_id
+            return test_id
+
+        except:
+            return False
+
 
     # }}}
 
@@ -143,7 +148,7 @@ class Stopwatch(object): # {{{
 if __name__ == "__main__":
 
     # fallback returncode
-    returncode = 4
+    returncode = 3
 
     # Parse Options # {{{
     parser = argparse.ArgumentParser(
@@ -263,16 +268,19 @@ if __name__ == "__main__":
 
     # send the mail by SMTP
     smtp_time.start()
-    r = a[args.sender].send(a[args.rcpt])
+    smtp_sender = a[args.sender].send(a[args.rcpt])
     smtp_time.stop()
 
     if args.debug:
-        print r
+        print smtp_sender
 
-    # Receive the mail.
-    imap_time.start()
-    a[args.rcpt].check(r)
-    imap_time.stop()
+    if smtp_sender:
+
+        # Receive the mail.
+        imap_time.start()
+        a[args.rcpt].check(smtp_sender)
+        imap_time.stop()
+
 
     ### Present the results
 
@@ -296,8 +304,12 @@ if __name__ == "__main__":
         else:
             returncode = 0
 
+        if not smtp_sender: # if it failed
+            returncode = 3
+            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+        else:
+            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
 
-        nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
         print nagios_template % (
             nagios_code[returncode],
             args.sender,
