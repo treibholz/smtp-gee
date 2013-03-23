@@ -1,5 +1,7 @@
 config.ini
 
+*.deb
+
 *.py[co]
 
 # Packages
