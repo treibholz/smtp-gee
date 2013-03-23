@@ -270,8 +270,8 @@ if __name__ == "__main__":
     if not args.nagios:
 
         # Default output
-        print "SMTP, time to send the mail: %s sec." % smtp_time.counter
-        print "IMAP, time until the mail appeared in the destination INBOX: %s sec." % imap_time.counter
+        print "SMTP, (%s) time to send the mail: %s sec." % (args.sender, smtp_time.counter, )
+        print "IMAP, (%s) time until the mail appeared in the destination INBOX: %s sec." % (args.rcpt, imap_time.counter, )
 
     else:
 
@@ -288,9 +288,11 @@ if __name__ == "__main__":
             returncode = 0
 
 
-        nagios_template="%s: sent in %s sec, received in %s sec|smtp=%s;%s;%s, imap=%s;%s;%s"
+        nagios_template="%s: (%s->%s) sent in %s sec, received in %s sec|smtp=%s;%s;%s, imap=%s;%s;%s"
         print nagios_template % (
             nagios_code[returncode],
+            args.sender,
+            args.rcpt,
             smtp_time.counter,
             imap_time.counter,
             smtp_time.counter,
