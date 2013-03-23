@@ -154,10 +154,12 @@ if __name__ == "__main__":
     main_parser_group = parser.add_argument_group('Main options')
     main_parser_group.add_argument('--from', dest='sender', action='store',
                     required=True,
+                    metavar="<name>",
                     help='The account to send the message')
 
     main_parser_group.add_argument('--rcpt', dest='rcpt', action='store',
                     required=True,
+                    metavar="<name>",
                     help='The account to receive the message')
 
     main_parser_group.add_argument('--nagios', dest='nagios', action='store_true',
@@ -172,6 +174,7 @@ if __name__ == "__main__":
 
     main_parser_group.add_argument('--config',dest='config_file', action='store',
                     default='config.ini',
+                    metavar="<file>",
                     required=False,
                     help='alternate config-file')
 
@@ -180,18 +183,21 @@ if __name__ == "__main__":
     smtp_parser_group.add_argument('--smtp_warn', dest='smtp_warn', action='store',
                     required=False,
                     default=15,
+                    metavar="<sec>",
                     type=int,
-                    help='warning threshold in sec to send the mail. Default: %(default)s')
+                    help='warning threshold to send the mail. Default: %(default)s')
 
     smtp_parser_group.add_argument('--smtp_crit', dest='smtp_crit', action='store',
                     required=False,
                     default=30,
+                    metavar="<sec>",
                     type=int,
-                    help='critical threshold in sec to send the mail. Default: %(default)s')
+                    help='critical threshold to send the mail. Default: %(default)s')
 
     smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
                     required=False,
                     default=60,
+                    metavar="<sec>",
                     type=int,
                     help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
 
@@ -200,18 +206,21 @@ if __name__ == "__main__":
     imap_parser_group.add_argument('--imap_warn', dest='imap_warn', action='store',
                     required=False,
                     default=120,
+                    metavar="<sec>",
                     type=int,
-                    help='warning threshold in sec until the mail appears in the INBOX. Default: %(default)s')
+                    help='warning threshold until the mail appears in the INBOX. Default: %(default)s')
 
     imap_parser_group.add_argument('--imap_crit', dest='imap_crit', action='store',
                     required=False,
                     default=300,
+                    metavar="<sec>",
                     type=int,
-                    help='critical threshold in sec until the mail appears in the INBOX. Default: %(default)s')
+                    help='critical threshold until the mail appears in the INBOX. Default: %(default)s')
 
     imap_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
                     required=False,
                     default=600,
+                    metavar="<sec>",
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
 
