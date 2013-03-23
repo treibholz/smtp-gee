@@ -150,61 +150,66 @@ if __name__ == "__main__":
         description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox',
         epilog = "Because e-mail is a realtime-medium and you know it!")
 
-    parser.add_argument('--from', dest='sender', action='store',
+
+    main_parser_group = parser.add_argument_group('Main options')
+    main_parser_group.add_argument('--from', dest='sender', action='store',
                     required=True,
                     help='The account to send the message')
 
-    parser.add_argument('--rcpt', dest='rcpt', action='store',
+    main_parser_group.add_argument('--rcpt', dest='rcpt', action='store',
                     required=True,
                     help='The account to receive the message')
 
-    parser.add_argument('--nagios', dest='nagios', action='store_true',
+    main_parser_group.add_argument('--nagios', dest='nagios', action='store_true',
                     required=False,
                     default=False,
                     help='output in Nagios mode')
 
-    parser.add_argument('--smtp_warn', dest='smtp_warn', action='store',
+
+    smtp_parser_group = parser.add_argument_group('SMTP options')
+    smtp_parser_group.add_argument('--smtp_warn', dest='smtp_warn', action='store',
                     required=False,
                     default=15,
                     type=int,
                     help='warning threshold in sec to send the mail. Default: %(default)s')
 
-    parser.add_argument('--smtp_crit', dest='smtp_crit', action='store',
+    smtp_parser_group.add_argument('--smtp_crit', dest='smtp_crit', action='store',
                     required=False,
                     default=30,
                     type=int,
                     help='critical threshold in sec to send the mail. Default: %(default)s')
 
-    parser.add_argument('--imap_warn', dest='imap_warn', action='store',
+    imap_parser_group = parser.add_argument_group('IMAP options')
+    imap_parser_group.add_argument('--imap_warn', dest='imap_warn', action='store',
                     required=False,
                     default=120,
                     type=int,
                     help='warning threshold in sec until the mail appears in the INBOX. Default: %(default)s')
 
-    parser.add_argument('--imap_crit', dest='imap_crit', action='store',
+    imap_parser_group.add_argument('--imap_crit', dest='imap_crit', action='store',
                     required=False,
                     default=300,
                     type=int,
                     help='critical threshold in sec until the mail appears in the INBOX. Default: %(default)s')
 
-    parser.add_argument('--imap_timeout', dest='imap_timeout', action='store',
+    imap_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
                     required=False,
                     default=600,
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
 
-    parser.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
+    smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
                     required=False,
                     default=60,
                     type=int,
                     help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
 
-    parser.add_argument('--debug', dest='debug', action='store_true',
+    main_parser_group.add_argument('--debug', dest='debug', action='store_true',
                     required=False,
                     default=False,
                     help='Debug mode')
 
-    parser.add_argument('--config',dest='config_file', action='store',
+    main_parser_group.add_argument('--config',dest='config_file', action='store',
                     default='config.ini',
                     required=False,
                     help='alternate config-file')
