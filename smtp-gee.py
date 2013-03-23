@@ -142,17 +142,13 @@ class Stopwatch(object): # {{{
 
 if __name__ == "__main__":
 
-    returncode=4
+    # fallback returncode
+    returncode = 4
 
-    nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
-
-    # Parse Options
+    # Parse Options # {{{
     parser = argparse.ArgumentParser(
         description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox',
         epilog = "Because e-mail is a realtime-medium and you know it!")
-
-#    parser.add_argument('integers', metavar='N', type=int, nargs='+',
-#                   help='an integer for the accumulator')
 
     parser.add_argument('--from', dest='sender', action='store',
                     required=True,
@@ -203,9 +199,6 @@ if __name__ == "__main__":
                     type=int,
                     help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
 
-
-
-
     parser.add_argument('--debug', dest='debug', action='store_true',
                     required=False,
                     default=False,
@@ -219,7 +212,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Read Config
+    # }}}
+
+    # Read Config {{{
 
     c = ConfigParser.ConfigParser()
     c.read(args.config_file)
@@ -243,9 +238,15 @@ if __name__ == "__main__":
         except:
             pass
 
+    # }}}
+
+    ### Here the real work begins  ###
+
+    # Create the stopwatches.
     smtp_time = Stopwatch()
     imap_time = Stopwatch()
 
+    # send the mail by SMTP
     smtp_time.start()
     r = a[args.sender].send(a[args.rcpt])
     smtp_time.stop()
@@ -253,18 +254,26 @@ if __name__ == "__main__":
     if args.debug:
         print r
 
+    # Receive the mail.
     imap_time.start()
     a[args.rcpt].check(r)
     imap_time.stop()
 
+    ### Present the results
+
     if not args.nagios:
 
+        # Default output
         print "SMTP, time to send the mail: %s sec." % smtp_time.counter
         print "IMAP, time until the mail appeared in the destination INBOX: %s sec." % imap_time.counter
 
     else:
 
+        # Nagios output
         # this could be beautified...
+
+        nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
+
         if   ((smtp_time.counter >= args.smtp_crit) or (imap_time.counter >= args.imap_crit)):
             returncode = 2
         elif ((smtp_time.counter >= args.smtp_warn) or (imap_time.counter >= args.imap_warn)):
