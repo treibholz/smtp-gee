@@ -84,38 +84,43 @@ Cheers.
     def check(self, check_id): # {{{
         """docstring for check"""
 
-        m = imaplib.IMAP4_SSL(self.imap_server)
+        try:
+            m = imaplib.IMAP4_SSL(self.imap_server)
 
-        m.login(self.login, self.password)
-        m.select()
+            m.login(self.login, self.password)
+            m.select()
 
-        data=['']
+            data=['']
 
-        count = 0
-        # Wait until the message is there.
-        while data == ['']:
-            typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
-            time.sleep(1)
-            count += 1
+            count = 0
+            # Wait until the message is there.
+            while data == ['']:
+                typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+                time.sleep(1)
+                count += 1
 
-        # print count
 
-        for num in data[0].split():
-            typ, data = m.fetch(num, '(RFC822)')
-            # print typ
-            msg = data[0][1]
+            for num in data[0].split():
+                typ, data = m.fetch(num, '(RFC822)')
+                # print typ
+                msg = data[0][1]
 
-        headers = Parser().parsestr(msg)
+            headers = Parser().parsestr(msg)
 
-        if self.__debug:
-            for h in headers.get_all('received'):
-                print "---"
-                print h.strip('\n')
+            if self.__debug:
+                for h in headers.get_all('received'):
+                    print "---"
+                    print h.strip('\n')
 
-        # deleting should be more sophisticated, for debugging...
-        #m.store(num, '+FLAGS', '\\Deleted')
-        m.close()
-        m.logout()
+            # deleting should be more sophisticated, for debugging...
+            #m.store(num, '+FLAGS', '\\Deleted')
+            m.close()
+            m.logout()
+
+            return True
+        except:
+            return False
+
     # }}}
 
     def set_debug(self, debug): # {{{
@@ -268,17 +273,17 @@ if __name__ == "__main__":
 
     # send the mail by SMTP
     smtp_time.start()
-    smtp_sender = a[args.sender].send(a[args.rcpt])
+    smtp_result = a[args.sender].send(a[args.rcpt])
     smtp_time.stop()
 
     if args.debug:
-        print smtp_sender
+        print smtp_result
 
-    if smtp_sender:
+    if smtp_result:
 
         # Receive the mail.
         imap_time.start()
-        a[args.rcpt].check(smtp_sender)
+        imap_result = a[args.rcpt].check(smtp_result)
         imap_time.stop()
 
 
@@ -304,9 +309,12 @@ if __name__ == "__main__":
         else:
             returncode = 0
 
-        if not smtp_sender: # if it failed
+        if not smtp_result: # if it failed
             returncode = 3
             nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+        elif not imap_result: # if it failed
+            returncode = 3
+            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
         else:
             nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
 
