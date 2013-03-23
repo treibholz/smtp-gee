@@ -165,6 +165,16 @@ if __name__ == "__main__":
                     default=False,
                     help='output in Nagios mode')
 
+    main_parser_group.add_argument('--debug', dest='debug', action='store_true',
+                    required=False,
+                    default=False,
+                    help='Debug mode')
+
+    main_parser_group.add_argument('--config',dest='config_file', action='store',
+                    default='config.ini',
+                    required=False,
+                    help='alternate config-file')
+
 
     smtp_parser_group = parser.add_argument_group('SMTP options')
     smtp_parser_group.add_argument('--smtp_warn', dest='smtp_warn', action='store',
@@ -178,6 +188,13 @@ if __name__ == "__main__":
                     default=30,
                     type=int,
                     help='critical threshold in sec to send the mail. Default: %(default)s')
+
+    smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
+                    required=False,
+                    default=60,
+                    type=int,
+                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
+
 
     imap_parser_group = parser.add_argument_group('IMAP options')
     imap_parser_group.add_argument('--imap_warn', dest='imap_warn', action='store',
@@ -197,22 +214,6 @@ if __name__ == "__main__":
                     default=600,
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
-
-    smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
-                    required=False,
-                    default=60,
-                    type=int,
-                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
-
-    main_parser_group.add_argument('--debug', dest='debug', action='store_true',
-                    required=False,
-                    default=False,
-                    help='Debug mode')
-
-    main_parser_group.add_argument('--config',dest='config_file', action='store',
-                    default='config.ini',
-                    required=False,
-                    help='alternate config-file')
 
 
     args = parser.parse_args()
