@@ -25,7 +25,6 @@ class ImapIdler(threading.Thread): # {{{
         self.__stop = threading.Event()
         self.__debug = debug
         self.__last_id = False
-        self.__new_id = False
 
         self.__result_store = {}
 
@@ -34,6 +33,7 @@ class ImapIdler(threading.Thread): # {{{
         self.__last_id = self.imapobject.select(self.imapfolder)[1][0]
 
         while True:
+            new_id = 0
             if self.__stop.isSet():
                 return
             else:
@@ -43,30 +43,36 @@ class ImapIdler(threading.Thread): # {{{
                         if self.__debug:
                             print 'Timeout or Event when IDLE!'
                         if self.imapobject.response('IDLE')[1][0] == None:
-                            new_id = self.imapobject.response('EXISTS')
+                            while True:
+                                response_id = self.imapobject.response('EXISTS')
+                                if response_id[1][0] == None:
+                                    break
+                                if response_id[1][0] > new_id:
+                                    new_id = response_id[1][0]
                             if self.__debug:
-                                print 'IMAP-EXISTS-response: ' + str(new_id)
-                            if new_id[1][0] != None:
-                                self.__new_id = new_id[1][0]
-                                self.parse_new_emails()
+                                print 'IMAP-EXISTS-response: ' + new_id
+                            if new_id > 0:
+                                self.parse_new_emails(new_id)
                 except:
-                    raise # FIXME: Errorhandling needed
+                    raise
 
-    def parse_new_emails(self):
-        while self.__new_id > self.__last_id:
+    def parse_new_emails(self, new_id):
+        while new_id > self.__last_id and not self.__stop.isSet():
             self.__last_id = str(int(self.__last_id) + 1)
 
             if self.__debug:
                 print "parsing mailid: " + self.__last_id
 
-            header = self.imapobject.fetch(self.__last_id, '(BODY[HEADER.FIELDS subject])')
+            fetch_header = self.imapobject.fetch(self.__last_id, '(BODY[HEADER.FIELDS subject])')
+
             if self.__debug:
-                print 'Headers fetched: ' + str(header)
-            if header[0] == 'OK' and header[1][0] != None: # FIXME: Errorhandling needed
-                if type(header[1][0]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
-                    header = header[1][0]
+                print 'Headers fetched: ' + str(fetch_header)
+            if fetch_header[0] == 'OK' and fetch_header[1][0] != None:
+                if type(fetch_header[1][0]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
+                    header = fetch_header[1][0]
                 else:
-                    header = header[1][1]
+                    header = fetch_header[1][1]
+
                 substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
                 my_id = re.sub(substring,'',header[1].strip())
                 if my_id in self.__result_store:
