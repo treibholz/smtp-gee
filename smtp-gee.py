@@ -17,20 +17,26 @@ from email.parser import Parser
 
 class ImapIdler(threading.Thread): # {{{
 
-    def __init__(self, imapobject, subject_prefix, debug=False, imapfolder='INBOX'):
+    def __init__(self, imap_server, login, password, subject_prefix, debug=False, imapfolder='INBOX'):
         threading.Thread.__init__(self)
-        self.imapobject = imapobject
         self.imapfolder = imapfolder
         self.subject_prefix = subject_prefix
         self.__stop = threading.Event()
         self.__debug = debug
         self.__last_id = False
+        self.idler_count = 0
 
         self.__result_store = {}
 
+        self.imapobject = imaplib2.IMAP4_SSL(imap_server)
+
+        self.imapobject.login(login, password)
+        self.imapobject.select()
+
+
     def run(self):
         # fetch last ids available
-        self.__last_id = self.imapobject.select(self.imapfolder)[1][0]
+        self.__last_id = int(self.imapobject.select(self.imapfolder)[1][0])
 
         while True:
             new_id = 0
@@ -41,50 +47,67 @@ class ImapIdler(threading.Thread): # {{{
                     result = self.imapobject.idle(10)
                     if result[0] == 'OK':
                         if self.__debug:
-                            print 'Timeout or Event when IDLE!'
+                            print 'ImapIdler-> Timeout or Event when IDLE!'
                         if self.imapobject.response('IDLE')[1][0] == None:
                             while True:
                                 response_id = self.imapobject.response('EXISTS')
                                 if response_id[1][0] == None:
                                     break
-                                if response_id[1][0] > new_id:
+                                if int(response_id[1][0]) > int(new_id):
                                     new_id = response_id[1][0]
                             if self.__debug:
-                                print 'IMAP-EXISTS-response: ' + new_id
+                                print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
                             if new_id > 0:
                                 self.parse_new_emails(new_id)
                 except:
                     raise
 
     def parse_new_emails(self, new_id):
-        while new_id > self.__last_id and not self.__stop.isSet():
-            self.__last_id = str(int(self.__last_id) + 1)
+        while int(new_id) > self.__last_id and not self.__stop.isSet():
+            self.__last_id += 1
+            test_id = str(self.__last_id)
 
             if self.__debug:
-                print "parsing mailid: " + self.__last_id
+                print "ImapIdler-> parsing mailid: " + test_id
 
-            fetch_header = self.imapobject.fetch(self.__last_id, '(BODY[HEADER.FIELDS subject])')
+            fetch_header = self.imapobject.fetch(test_id, '(BODY[HEADER.FIELDS subject])')
 
             if self.__debug:
-                print 'Headers fetched: ' + str(fetch_header)
+                print 'ImapIdler-> Headers fetched: ' + str(fetch_header)
             if fetch_header[0] == 'OK' and fetch_header[1][0] != None:
-                if type(fetch_header[1][0]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
-                    header = fetch_header[1][0]
+                if type(fetch_header[1][-3]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
+                    header = fetch_header[1][-3][1]
                 else:
-                    header = fetch_header[1][1]
+                    header = fetch_header[1][-3]
 
-                substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
-                my_id = re.sub(substring,'',header[1].strip())
-                if my_id in self.__result_store:
-                    raise Exception('duplicate Mail?')
-                else:
-                    if self.__debug:
-                        print "found id: " + my_id
-                    self.__result_store.update({ my_id : time.time() })
+                if header:
+                    substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
+                    my_id = re.sub(substring,'',header.strip())
+                    if my_id in self.__result_store:
+                        raise Exception('ImapIdler-> duplicate Mail?')
+                    else:
+                        if self.__debug:
+                            print "ImapIdler-> found id: " + my_id
+                        self.__result_store.update({ my_id : time.time() })
 
-    def stop(self):
-        self.__stop.set()
-        self.imapobject.logout()
+    def startup(self, nr_of_senders=1):
+        if self.__debug:
+            print "ImapIdler-> starting up Thread"
+            print "ImapIdler-> will wait for " + str(nr_of_senders) + " senders to complete"
+        self.start()
+        self.idler_count = nr_of_senders
+
+    def stop(self, force=False):
+        if self.idler_count == 1 or force:
+            if self.__debug:
+                print "ImapIdler-> stoping Thread now"
+            self.__stop.set()
+            self.imapobject.logout()
+            self.join()
+        else:
+            if self.__debug:
+                print 'ImapIdler-> thread_waiter: ' + str((self.idler_count-1))
+            self.idler_count -= 1
 
     def get_ids(self):
         return self.__result_store
@@ -104,18 +127,22 @@ class Account(object): # {{{
             print "you need to configure the key " + str(e) + "in configsection " + configdict['name']
             sys.exit(255)
  
-        if 'smtp_over_ssl' in configdict:
-            self.smtp_over_ssl  =   configdict['smtp_over_ssl']
-        else:
-            self.smtp_over_ssl  =   False
-
 
         # default values
-        self.__imap_timeout   =   600
-        self.__debug        =   False
-        self.imap_idle      =   False
+        self.__idler              =   None
+        self.__imap_timeout     =   600
+        self.__debug            =   False
+        self.imap_idle          =   False
+        self.smtp_over_ssl      =   False
 
-        self.subject_prefix = "[SMTP-GEE] |"
+        # overwrite defaults
+        if 'smtp_over_ssl' in configdict:
+            self.smtp_over_ssl  =   configdict['smtp_over_ssl']
+        if 'imap_idle' in configdict:
+            self.imap_idle      =   True
+
+        # check_subject prefix
+        self.subject_prefix     =   "[SMTP-GEE] |"
     # }}}
 
     def send(self, recipient): # {{{
@@ -134,7 +161,7 @@ sent to:   %s
 Cheers.
     SMTP-GEE
 
-""" % (socket.getfqdn(), timestamp, self.email, recipient.email, )
+""" % (socket.getfqdn(), timestamp, self.email, recipient, )
 
 
         test_id = hashlib.sha1(payload).hexdigest()
@@ -143,7 +170,7 @@ Cheers.
         msg = MIMEText(payload)
 
         msg['From']     =   self.email
-        msg['To']       =   recipient.email
+        msg['To']       =   recipient
         msg['Subject']  =   self.subject_prefix + test_id
 
         try:
@@ -158,7 +185,7 @@ Cheers.
             #s.set_debuglevel(2)
             s.login(self.login, self.password )
 
-            s.sendmail( self.email, recipient.email, msg.as_string() )
+            s.sendmail( self.email, recipient, msg.as_string() )
             s.quit()
 
             return test_id
@@ -169,39 +196,39 @@ Cheers.
 
     # }}}
 
-    def start_idle(self):
-        self.ImapIdle(start=True)
+    def start_idle(self, nr_of_senders=1): # {{{
+        ''' helper function for IMAP IDLE. Startup IDLER thread'''
+        if self.imap_idle:
+            self.ImapIdle(start=True, nr_of_senders=nr_of_senders)
+    # }}}
 
-    def ImapIdle(self, check_id=None, start=False):
-        if start:
-            m = imaplib2.IMAP4_SSL(self.imap_server)
-
-            m.login(self.login, self.password)
-            m.select()
-
-            self.idler = ImapIdler(m, self.subject_prefix, self.__debug)
-            self.idler.start()
-        else:
+    def ImapIdle(self, check_id=None, start=False, nr_of_senders=1): # {{{
+        '''Check Imap Idle Threads or startup idler (start=True)'''
+        if start and self.__idler is None:
+            self.__idler = ImapIdler(self.imap_server, self.login, self.password,  self.subject_prefix, self.__debug)
+            self.__idler.startup(nr_of_senders)
+        elif not start:
             if check_id == None:
                 raise Exception('Missing check_id')
             else:
                 check_start = int(time.time())
                 check_now = check_start
                 while (check_now - check_start) < self.__imap_timeout:
-                    results = self.idler.get_ids()
+                    results = self.__idler.get_ids()
                     if check_id in results:
-                        self.idler.stop()
-                        self.idler.join()
+                        self.__idler.stop()
                         return True, results[check_id]
                     else:
                         time.sleep(1)
                         check_now = int(time.time())
                 else:
-                    self.idler.stop()
-                    self.idler.join()
+                    self.__idler.stop()
+                    self.__idler.join()
                     return False, None
+    # }}}
 
-    def ImapSearch(self, imapobject, check_id):
+    def ImapSearch(self, imapobject, check_id): # {{{
+        ''' Search for check_id in imapobject'''
         data=[]
 
         # Wait until the message is there.
@@ -235,10 +262,10 @@ Cheers.
         imapobject.close()
         imapobject.logout()
         return result, timestamp
-
+    # }}}
 
     def check(self, check_id): # {{{
-        """docstring for check"""
+        """check for given test-ID in IMAP Folder(s)"""
         if self.imap_idle:
             return self.ImapIdle(check_id)
         else:
@@ -287,7 +314,7 @@ class Stopwatch(object): # {{{
 if __name__ == "__main__":
 
     # fallback returncode
-    returncode = 3
+    returncode = 0
 
     # Parse Options # {{{
     parser = argparse.ArgumentParser(
@@ -298,13 +325,13 @@ if __name__ == "__main__":
     main_parser_group = parser.add_argument_group('Main options')
     main_parser_group.add_argument('--from', dest='sender', action='store',
                     required=True,
-                    metavar="<name>",
-                    help='The account to send the message')
+                    metavar="<name>|<name,name>,all",
+                    help='The account(s) to send the message from (must be comma separated for lists)')
 
     main_parser_group.add_argument('--rcpt', dest='rcpt', action='store',
                     required=True,
-                    metavar="<name>",
-                    help='The account to receive the message')
+                    metavar="<name>|<name,name>,all",
+                    help='The account(s) to receive the message on (must be comma separated for lists)')
 
     main_parser_group.add_argument('--nagios', dest='nagios', action='store_true',
                     required=False,
@@ -363,21 +390,72 @@ if __name__ == "__main__":
 
     imap_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
                     required=False,
-                    default=600,
+                    default=300,
                     metavar="<sec>",
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
-
-    imap_parser_group.add_argument('--imap_idle', dest='imap_idle', action='store_true',
-                    default=False,
-                    help='Use IMAP IDLE')
 
     args = parser.parse_args()
 
     # }}}
 
-    # Read Config {{{
+    def execute_checks(accounts, all_sender, all_recipient, debug=False): # {{{
+        senders = all_sender.split(',')
+        recipients = all_recipient.split()
+        results = {}
 
+
+        if len(senders) == 1 and senders[0] == 'all':
+            if senders not in accounts.keys():
+                senders = accounts.keys()
+            else:
+                if debug:
+                    print "NOTICE: using \"all\" for senders but have that as section in configfile"
+
+        if len(recipients) == 1 and recipients[0] == 'all':
+            if recipients not in accounts.keys():
+                recipients = accounts.keys()
+            else:
+                if debug:
+                    print "NOTICE: using \"all\" for recipients but have that as section in configfile"
+
+        ### Here the real work begins  ###
+        for sender in senders:
+            # Create the stopwatches.
+            smtp_time = Stopwatch()
+
+            for recipient in recipients:
+                resultname = sender + '->' + recipient
+                results.update({ resultname : {} })
+
+                # if possible startup idler
+                accounts[recipient].start_idle(len(senders)) # we need to overgive the number of senders
+
+                # send the mail by SMTP
+                smtp_time.start()
+                test_id = accounts[sender].send(accounts[recipient].email)
+                smtp_time.stop()
+
+                if test_id:
+                    results[resultname].update({ 'SMTP' : True })
+                    results[resultname].update({ 'ID' : test_id })
+                    results[resultname].update({ 'SMTP_TIME' : smtp_time.counter })
+
+                    if args.debug:
+                        print "Test-ID: " + test_id
+
+                    # Create the stopwatches.
+                    imap_time = Stopwatch()
+                    # Receive the mail.
+                    imap_time.start()
+                    success, stoptime = accounts[recipient].check(test_id)
+                    imap_time.stop(stoptime)
+                    results[resultname].update({ 'IMAP' : success })
+                    results[resultname].update({ 'IMAP_TIME' : imap_time.counter })
+        return results
+    # }}}
+
+    # Read Config {{{
     cparser = ConfigParser.ConfigParser()
     cparser.read(args.config_file)
 
@@ -398,75 +476,51 @@ if __name__ == "__main__":
         accounts[section].set_timeout('imap', args.imap_timeout)
     # }}}
 
-    ### Here the real work begins  ###
-    if args.imap_idle and args.rcpt in accounts.keys():
-        accounts[args.rcpt].imap_idle = args.imap_idle
-        accounts[args.rcpt].start_idle()
+    ### get the results
+    results = execute_checks(accounts, args.sender, args.rcpt)
 
-    # Create the stopwatches.
-    smtp_time = Stopwatch()
-    imap_time = Stopwatch()
-
-    # send the mail by SMTP
-    smtp_time.start()
-    smtp_sender = accounts[args.sender].send(accounts[args.rcpt])
-    smtp_time.stop()
-
-    if args.debug:
-        print "Test-ID: " + smtp_sender
-
-    if smtp_sender:
-
-        # Receive the mail.
-        imap_time.start()
-        success, stoptime = accounts[args.rcpt].check(smtp_sender)
-        imap_time.stop(stoptime)
-
-    ### Present the results
-
-    if not args.nagios:
-
-        if success:
-            # Default output
-            print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
-            print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, )
+    # present the results
+    for resultkey in results.keys():
+        if not args.nagios:
+            if results[resultkey]['SMTP'] and results[resultkey]['IMAP']:
+                # Default output
+                print "SMTP, (%s) time to send the mail: %.3f sec." % (resultkey, results[resultkey]['SMTP_TIME'], )
+                print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (resultkey, results[resultkey]['IMAP_TIME'], )
+            else:
+                print "SMTP, (%s) time to send the mail: %.3f sec." % (resultkey, results[resultkey]['SMTP_TIME'], )
+                print "IMAP, (%s) the mail could not be fetched within %.3f sec." % (resultkey, results[resultkey]['IMAP_TIME'], )
         else:
-            print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
-            print "IMAP, (%s) the mail could not be fetched within %.3f sec." % (args.rcpt, imap_time.counter, )
-    else:
 
-        # Nagios output
-        # this could be beautified...
+            # Nagios output
+            # this could be beautified...
+            nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
 
-        nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
+            if   ((results[resultkey]['SMTP_TIME'] >= args.smtp_crit) or (results[resultkey]['IMAP_TIME'] >= args.imap_crit)):
+                returncode = 2
+            elif ((results[resultkey]['SMTP_TIME'] >= args.smtp_warn) or (results[resultkey]['IMAP_TIME'] >= args.imap_warn)):
+                if returncode < 1:
+                    returncode = 1
 
-        if   ((smtp_time.counter >= args.smtp_crit) or (imap_time.counter >= args.imap_crit)):
-            returncode = 2
-        elif ((smtp_time.counter >= args.smtp_warn) or (imap_time.counter >= args.imap_warn)):
-            returncode = 1
-        else:
-            returncode = 0
+            if results[resultkey]['SMTP'] or not results[resultkey]['IMAP']: # if it failed
+                returncode = 2
+                nagios_template="%s: (%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            else:
+                nagios_template="%s: (%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
 
-        if not smtp_sender or not success: # if it failed
-            returncode = 3
-            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
-        else:
-            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            print nagios_template % (
+                nagios_code[returncode],
+                resultkey,
+                results[resultkey]['SMTP_TIME'],
+                results[resultkey]['IMAP_TIME'],
+                results[resultkey]['SMTP_TIME'],
+                args.smtp_warn,
+                args.smtp_crit,
+                results[resultkey]['IMAP_TIME'],
+                args.imap_warn,
+                args.imap_crit,
+            )
 
-        print nagios_template % (
-            nagios_code[returncode],
-            args.sender,
-            args.rcpt,
-            smtp_time.counter,
-            imap_time.counter,
-            smtp_time.counter,
-            args.smtp_warn,
-            args.smtp_crit,
-            imap_time.counter,
-            args.imap_warn,
-            args.imap_crit,
-        )
-
+    if args.nagios:
         sys.exit(returncode)
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
