@@ -57,7 +57,7 @@ class ImapIdler(threading.Thread): # {{{
                                     new_id = response_id[1][0]
                             if self.__debug:
                                 print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
-                            if new_id > 0:
+                            if int(new_id) > 0:
                                 self.parse_new_emails(new_id)
                 except:
                     raise
@@ -245,8 +245,11 @@ Cheers.
             result = True
             for num in data[0].split():
                 typ, data = imapobject.fetch(num, '(RFC822)')
-                # print typ
+
+            if type(data[0]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
                 msg = data[0][1]
+            elif type(data[1]).__name__ == 'tuple':
+                msg = data[1][1]
 
             headers = Parser().parsestr(msg)
 
