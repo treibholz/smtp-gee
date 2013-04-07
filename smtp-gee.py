@@ -86,22 +86,30 @@ class ImapIdler(threading.Thread): # {{{
 
 class Account(object): # {{{
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", imap_timeout="600", smtp_over_ssl=False, use_imap_idle=False): # {{{
-        super(Account, self).__init__()
-        self.name           =   name
-        self.login          =   login
-        self.password       =   password
-        self.smtp_server    =   smtp_server
-        self.imap_server    =   imap_server
-        self.email          =   login
-        self.imap_timeout   =   imap_timeout
+    def __init__(self, configdict): # {{{
+        try:
+            self.name           =   configdict['name']
+            self.login          =   configdict['login']
+            self.password       =   configdict['password']
+            self.smtp_server    =   configdict['smtp_server']
+            self.imap_server    =   configdict['imap_server']
+            self.email          =   configdict['email']
+        except KeyError, e:
+            print "you need to configure the key " + str(e) + "in configsection " + configdict['name']
+            sys.exit(255)
+ 
+        if 'smtp_over_ssl' in configdict:
+            self.smtp_over_ssl  =   configdict['smtp_over_ssl']
+        else:
+            self.smtp_over_ssl  =   False
 
+
+        # default values
+        self.__imap_timeout   =   600
         self.__debug        =   False
-        self.smtp_over_ssl  =   smtp_over_ssl
+        self.imap_idle      =   False
 
         self.subject_prefix = "[SMTP-GEE] |"
-
-        self.imap_idle      =   use_imap_idle
     # }}}
 
     def send(self, recipient): # {{{
@@ -173,7 +181,7 @@ Cheers.
             else:
                 check_start = int(time.time())
                 check_now = check_start
-                while (check_now - check_start) < self.imap_timeout:
+                while (check_now - check_start) < self.__imap_timeout:
                     results = self.idler.get_ids()
                     if check_id in results:
                         self.idler.stop()
@@ -193,7 +201,7 @@ Cheers.
         # Wait until the message is there.
         check_start = int(time.time())
         check_now = check_start
-        while data == [] and (check_now - check_start) < self.imap_timeout:
+        while data == [] and (check_now - check_start) < self.__imap_timeout:
             typ, data = imapobject.search(None, 'SUBJECT', '"%s"' % check_id)
             time.sleep(1)
             check_now = int(time.time())
@@ -241,6 +249,12 @@ Cheers.
         self.__debug = debug
 
     # }}}
+
+    def set_timeout(self, key, timeout): # {{{
+        """set timeout value"""
+        setattr(self, '__' + key + '_timeout', timeout)
+    # }}}
+
 
 # }}}
 
@@ -358,38 +372,30 @@ if __name__ == "__main__":
 
     # Read Config {{{
 
-    c = ConfigParser.ConfigParser()
-    c.read(args.config_file)
+    cparser = ConfigParser.ConfigParser()
+    cparser.read(args.config_file)
 
-    a={}
+    accounts = {}
 
-    for s in c.sections():
-        a[s] = Account(s)
+    for section in cparser.sections():
 
-        a[s].set_debug(args.debug)
+        configdict = {}
 
-        # This has to be more easy...
-        a[s].smtp_server = c.get(s, 'smtp_server')
-        a[s].imap_server = c.get(s, 'imap_server')
-        a[s].password    = c.get(s, 'password')
-        a[s].login       = c.get(s, 'login')
-        a[s].email       = c.get(s, 'email')
+        configdict.update({ 'name' : section })
+        for option in cparser.options(section):
+            configdict.update({ option : cparser.get(section, option) })
 
-        # FIXME: do that via SET method maybe
-        a[s].imap_timeout = args.imap_timeout
-        if s == args.rcpt:
-            if args.imap_idle:
-                a[s].imap_idle = args.imap_idle
-                a[s].start_idle()
+        accounts.update({ section : Account(configdict) })
         
-        try:
-            a[s].smtp_over_ssl = c.get(s, 'smtp_over_ssl')
-        except:
-            pass
+        accounts[section].set_debug(args.debug)
 
+        accounts[section].set_timeout('imap', args.imap_timeout)
     # }}}
 
     ### Here the real work begins  ###
+    if args.imap_idle and args.rcpt in accounts.keys():
+        accounts[args.rcpt].imap_idle = args.imap_idle
+        accounts[args.rcpt].start_idle()
 
     # Create the stopwatches.
     smtp_time = Stopwatch()
@@ -397,7 +403,7 @@ if __name__ == "__main__":
 
     # send the mail by SMTP
     smtp_time.start()
-    smtp_sender = a[args.sender].send(a[args.rcpt])
+    smtp_sender = accounts[args.sender].send(accounts[args.rcpt])
     smtp_time.stop()
 
     if args.debug:
@@ -407,17 +413,20 @@ if __name__ == "__main__":
 
         # Receive the mail.
         imap_time.start()
-        result, stoptime = a[args.rcpt].check(smtp_sender)
+        success, stoptime = accounts[args.rcpt].check(smtp_sender)
         imap_time.stop(stoptime)
 
     ### Present the results
 
     if not args.nagios:
 
-        # Default output
-        print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
-        print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, )
-
+        if success:
+            # Default output
+            print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
+            print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, )
+        else:
+            print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
+            print "IMAP, (%s) the mail could not be fetched within %.3f sec." % (args.rcpt, imap_time.counter, )
     else:
 
         # Nagios output
@@ -432,7 +441,7 @@ if __name__ == "__main__":
         else:
             returncode = 0
 
-        if not smtp_sender or result == False: # if it failed
+        if not smtp_sender or not success: # if it failed
             returncode = 3
             nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
         else:
