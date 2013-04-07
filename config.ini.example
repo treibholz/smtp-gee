@@ -13,6 +13,7 @@ email       = test@gmx.de
 password    = passw0rd
 smtp_server = smtp.gmx.net
 imap_server = imap.gmx.net
+imap_idle   = True
 
 [yahoo.com]
 

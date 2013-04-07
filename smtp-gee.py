@@ -16,55 +16,71 @@ from email.mime.text import MIMEText
 from email.parser import Parser
 
 class ImapIdler(threading.Thread): # {{{
+    """This Class is used to create the ImapIdler Object."""
 
-    def __init__(self, imap_server, login, password, subject_prefix, debug=False, imapfolder='INBOX'):
+    def __init__(self, imap_server, login, password, subject_prefix, debug=False, imapfolder='INBOX'): # {{{
         threading.Thread.__init__(self)
         self.imapfolder = imapfolder
         self.subject_prefix = subject_prefix
         self.__stop = threading.Event()
         self.__debug = debug
         self.__last_id = False
-        self.idler_count = 0
+        self.senders = 0
 
+        # create empty resultdict
         self.__result_store = {}
 
+        # create the Imap Object
         self.imapobject = imaplib2.IMAP4_SSL(imap_server)
-
         self.imapobject.login(login, password)
         self.imapobject.select()
+    # }}}
 
-
-    def run(self):
-        # fetch last ids available
+    def run(self): # {{{
+        """we override the run method from threading.Thread so it knows what to do."""
+        # get last id available
         self.__last_id = int(self.imapobject.select(self.imapfolder)[1][0])
 
+        # well..always do that untill we stop it
         while True:
             new_id = 0
+            # if we need to stop we will
             if self.__stop.isSet():
                 return
             else:
                 try:
+                    # start IDLE with a timeout of 10 seconds
                     result = self.imapobject.idle(10)
+                    # we finished IDLEING for now
                     if result[0] == 'OK':
                         if self.__debug:
                             print 'ImapIdler-> Timeout or Event when IDLE!'
+                        # check if timeout or new event happened
                         if self.imapobject.response('IDLE')[1][0] == None:
+                            # try to get EXISTS message untill there are no more
                             while True:
+                                # get the Mail-IDs
                                 response_id = self.imapobject.response('EXISTS')
+                                # there are no more messages stacked
                                 if response_id[1][0] == None:
                                     break
+                                # if the new ID is newer overwrite new_id
                                 if int(response_id[1][0]) > int(new_id):
                                     new_id = response_id[1][0]
                             if self.__debug:
                                 print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
+                            # parse fetched messages
                             self.parse_new_emails(new_id)
 
                 except:
                     raise
+    # }}}
 
     def parse_new_emails(self, new_id):
-        if int(new_id) < self.__last_id or int(new_id) == self.__last_id: # possibly some emails got deleted..
+        # reset last_id because possibly some emails got deleted..
+        if int(new_id) < self.__last_id or int(new_id) == self.__last_id: 
             self.__last_id == (int(new_id)-1)
+        # iterate through messages if we shall not stop yet
         while int(new_id) > self.__last_id and not self.__stop.isSet():
             self.__last_id += 1
             test_id = str(self.__last_id)
@@ -72,12 +88,15 @@ class ImapIdler(threading.Thread): # {{{
             if self.__debug:
                 print "ImapIdler-> parsing mailid: " + test_id
 
+            # fetch the subject from the new message
             fetch_result, fetch_header = self.imapobject.fetch(test_id, '(BODY[HEADER.FIELDS subject])')
 
             if self.__debug:
                 print 'ImapIdler-> Headers fetched: ' + str(fetch_header)
+            # now we need to check if the subject contains the test-id
             if fetch_result == 'OK' and fetch_header[0] != None and len(fetch_header) > 2:
-                if fetch_header[-2] == ')': # that is really crazy but the result from fetch....can be strange!
+                # that is really crazy but the result from fetch....can be strange!
+                if fetch_header[-2] == ')': 
                     header = fetch_header[-3]
                 elif fetch_header[-1] == ')':
                     header = fetch_header[-2]
@@ -86,8 +105,10 @@ class ImapIdler(threading.Thread): # {{{
                     header = header[1]
 
                 if header:
+                    # do some substitution to get just the test_id
                     substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
                     my_id = re.sub(substring,'',header.strip())
+                    # store the id in a dict with the current timestamp
                     if my_id in self.__result_store:
                         raise Exception('ImapIdler-> duplicate Mail?')
                     else:
@@ -99,27 +120,29 @@ class ImapIdler(threading.Thread): # {{{
         if self.__debug:
             print "ImapIdler-> starting up Thread"
             print "ImapIdler-> will wait for " + str(nr_of_senders) + " senders to complete"
+        # start the thread
         self.start()
-        self.idler_count = nr_of_senders
+        self.senders = nr_of_senders
 
     def stop(self, force=False):
-        if self.idler_count == 1 or force:
+        # stop the thread if all senders are through
+        if self.senders == 1 or force:
             if self.__debug:
-                print "ImapIdler-> stoping Thread now"
+                print "ImapIdler-> stopping Thread now"
             self.__stop.set()
             self.imapobject.logout()
             self.join()
         else:
             if self.__debug:
-                print 'ImapIdler-> thread_waiter: ' + str((self.idler_count-1))
-            self.idler_count -= 1
+                print 'ImapIdler-> waiting for ' + str((self.senders-1)) + ' more senders'
+            self.senders -= 1
 
     def get_ids(self):
         return self.__result_store
 # }}}
 
 class Account(object): # {{{
-    """docstring for Account"""
+    """Account object we use for sending or fetching messages"""
     def __init__(self, configdict): # {{{
         try:
             self.name           =   configdict['name']
@@ -134,10 +157,11 @@ class Account(object): # {{{
  
 
         # default values
-        self.__idler              =   None
         self.__imap_timeout     =   300
         self.__debug            =   False
         self.imap_idle          =   False
+        self.connected          =   False
+        self.started            =   False
         self.smtp_over_ssl      =   False
 
         # overwrite defaults
@@ -146,16 +170,18 @@ class Account(object): # {{{
         if 'imap_idle' in configdict:
             self.imap_idle      =   True
 
-        # check_subject prefix
+        # subject prefix used in mails
         self.subject_prefix     =   "[SMTP-GEE] |"
     # }}}
 
     def send(self, recipient): # {{{
-        """docstring for send"""
+        """send a message to 'recipient'"""
 
+        # get current timestamp
         timestamp = time.time()
 
-        payload = """Hi,
+        # the Message we use
+        mail_template = """Hi,
 this is a testmail, generated by SMTP-GEE.
 
 sent on:   %s
@@ -168,118 +194,168 @@ Cheers.
 
 """ % (socket.getfqdn(), timestamp, self.email, recipient, )
 
+        # create hash from template for tests
+        test_id = hashlib.sha1(mail_template).hexdigest()
 
-        test_id = hashlib.sha1(payload).hexdigest()
+        msg = MIMEText(mail_template)
 
-
-        msg = MIMEText(payload)
-
+        # set sender, recipient and subject
         msg['From']     =   self.email
         msg['To']       =   recipient
         msg['Subject']  =   self.subject_prefix + test_id
 
+        # create smtp object and send message through
         try:
             if self.smtp_over_ssl:
                 if self.__debug: print "SMTP-over-SSL is used"
-                s = smtplib.SMTP_SSL( self.smtp_server )
+                smtp_server = smtplib.SMTP_SSL( self.smtp_server )
             else:
                 if self.__debug: print "SMTP is used"
-                s = smtplib.SMTP( self.smtp_server )
-                s.starttls()
+                smtp_server = smtplib.SMTP( self.smtp_server )
+                smtp_server.starttls()
 
-            #s.set_debuglevel(2)
-            s.login(self.login, self.password )
+            smtp_server.login(self.login, self.password )
 
-            s.sendmail( self.email, recipient, msg.as_string() )
-            s.quit()
+            smtp_server.sendmail( self.email, recipient, msg.as_string() )
+            smtp_server.quit()
 
+            # return test_id for fetching the message
             return test_id
-
+        # failed to create smtp object
         except:
             return False
-
-
     # }}}
 
-    def start_idle(self, nr_of_senders=1): # {{{
+    def prepare_startup(self, nr_of_senders=1): # {{{
         ''' helper function for IMAP IDLE. Startup IDLER thread'''
-        if self.imap_idle:
-            self.ImapIdle(start=True, nr_of_senders=nr_of_senders)
+        if not self.started:
+            self.started = True
+            self.senders = nr_of_senders
+            # startup idler if we have that functionality
+            if self.imap_idle:
+                self.ImapIdle(start=True)
     # }}}
 
-    def ImapIdle(self, check_id=None, start=False, nr_of_senders=1): # {{{
+    def ImapIdle(self, check_id=None, start=False): # {{{
         '''Check Imap Idle Threads or startup idler (start=True)'''
-        if start and self.__idler is None:
+
+        # onle create a new idler of we are not yet connected and we are at startup
+        if start and not self.connected:
             self.__idler = ImapIdler(self.imap_server, self.login, self.password,  self.subject_prefix, self.__debug)
-            self.__idler.startup(nr_of_senders)
+            self.__idler.startup(self.senders)
+            self.connected = True
+        # if it's not the startup we need to check if the id is yet received
         elif not start:
             if check_id == None:
                 raise Exception('Missing check_id')
             else:
+                # set the check_start time for imap timeouts
                 check_start = int(time.time())
                 check_now = check_start
+                # check for check_id until timeout occurs
                 while (check_now - check_start) < self.__imap_timeout:
+                    # call get_ids to get a list of already fetched testmails
                     results = self.__idler.get_ids()
                     if check_id in results:
+                        # immediately stop if we found it
                         self.__idler.stop()
+                        self.senders -= 1
                         return True, results[check_id]
                     else:
+                        # try again later if not
                         time.sleep(1)
                         check_now = int(time.time())
                 else:
+                    # timeout occured. Stop everything.
+                    if self.senders == 1:
+                        # if we have no more senders waiting
+                        self.connected = False
+                    # decrease sender variable
+                    self.senders -= 1
                     self.__idler.stop()
                     self.__idler.join()
                     return False, None
     # }}}
 
-    def ImapSearch(self, imapobject, check_id): # {{{
+    def ImapSearch(self, check_id): # {{{
         ''' Search for check_id in imapobject'''
-        data=[]
+        data=['']
+
+        # only connect if we are not yet connected
+        if not self.connected:
+            if self.__debug:
+                print 'Starting IMAP Connection'
+            self.imapobject = imaplib2.IMAP4_SSL(self.imap_server)
+            self.imapobject.login(self.login, self.password)
+            self.connected = True
+
+        self.imapobject.select()
 
         # Wait until the message is there.
         check_start = int(time.time())
         check_now = check_start
-        while data == [] and (check_now - check_start) < self.__imap_timeout:
-            typ, data = imapobject.search(None, 'SUBJECT', '"%s"' % check_id)
+
+        # search for the mail-id until timeout or you got it
+        while data == [''] and (check_now - check_start) < self.__imap_timeout:
+            typ, data = self.imapobject.search(None, 'SUBJECT', '"%s"' % check_id)
             time.sleep(1)
             check_now = int(time.time())
 
+        # that's the timestamp we received the testmail
         timestamp = time.time()
 
-        if data != []:
+        if data != ['']:
             result = True
-            for num in data[0].split():
-                typ, data = imapobject.fetch(num, '(RFC822)')
-
-
-            if self.__debug:
-                if len(data) < 2:
-                    print "result is less then 2 elements"
-                    print str(data)
-
-            if data[-1] == ')': # that is really crazy but the result from fetch....can be strange!
-                msg = data[-2][1]
-            elif data[-2] == ')':
-                msg = data[-3][1]
-            else:
-                if self.__debug:
-                    print "Do not know what to use from " + str(data)
-                    print "fallback to data[0][1]"
-                msg = data[0][1]
-
-            headers = Parser().parsestr(msg)
-
-            if self.__debug:
-                for h in headers.get_all('received'):
-                    print "---"
-                    print h.strip('\n')
         else:
             result = False
+            if self.__debug:
+                print "Failed to fetch the Message...Sorry!"
+
+        # the following is just for debug
+        if self.__debug:
+            if result:
+                for num in data[0].split():
+                    # fetch the complete message
+                    typ, data = self.imapobject.fetch(num, '(RFC822)')
+
+                if len(data) < 2:
+                    print "HICKUP: result is less then 2 elements?\n->don't know what to do with that...setting data to false"
+                    print "Data: " + str(data)
+                    data = False
+
+            if data:
+                if data[-1] == ')': # we need to search for the correct message...it's one field before the ')' field
+                    msg = data[-2][1]
+                elif data[-2] == ')':
+                    msg = data[-3][1]
+                else:
+                    if self.__debug:
+                        print "Do not know what to use from " + str(data)
+                        print "fallback to data[0][1]"
+                    msg = data[0][1]
+                try:
+                    headers = Parser().parsestr(msg)
+                except:
+                    print "Error when parsing the message...the message is somehow strange"
+                else:
+                    for h in headers.get_all('received'):
+                        print "---"
+                        print h.strip('\n')
 
         # deleting should be more sophisticated, for debugging...
         #m.store(num, '+FLAGS', '\\Deleted')
-        imapobject.close()
-        imapobject.logout()
+
+        # just close the imap connection when all senders for this account are done
+        if self.senders == 1:
+            if self.__debug:
+                print "Closing IMAP Connection"
+            self.imapobject.close()
+            self.imapobject.logout()
+        else:
+            if self.__debug:
+                print "Will wait for " + str(self.senders-1) + " senders to complete"
+            self.senders -= 1
+        # return the results and our timestamp
         return result, timestamp
     # }}}
 
@@ -288,16 +364,11 @@ Cheers.
         if self.imap_idle:
             return self.ImapIdle(check_id)
         else:
-            m = imaplib2.IMAP4_SSL(self.imap_server)
-
-            m.login(self.login, self.password)
-            m.select()
-
-            return self.ImapSearch(m, check_id)
+            return self.ImapSearch(check_id)
     # }}}
 
     def set_debug(self, debug): # {{{
-        """docstring for set_debug"""
+        """set debugging True or False"""
         self.__debug = debug
 
     # }}}
@@ -311,7 +382,7 @@ Cheers.
 # }}}
 
 class Stopwatch(object): # {{{
-    """docstring for Stopwatch"""
+    """Well...a stopwatch class"""
     def __init__(self, debug=False):
         super(Stopwatch, self).__init__()
         self.__debug = debug
@@ -319,11 +390,11 @@ class Stopwatch(object): # {{{
         self.counter = 0
 
     def start(self, my_time=time.time()):
-        """docstring for start"""
+        """start the damn thing."""
         self.__start = my_time
 
     def stop(self, my_time=time.time()):
-        """docstring for stop"""
+        """stop it. you may set a time here, too"""
         if my_time == None:
             my_time = time.time()
         self.counter += my_time - self.__start
@@ -439,16 +510,22 @@ if __name__ == "__main__":
                     print "NOTICE: using \"all\" for recipients but have that as section in configfile"
 
         ### Here the real work begins  ###
-        for sender in senders:
-            # Create the stopwatches.
-            smtp_time = Stopwatch()
 
-            for recipient in recipients:
+        # Create the stopwatches.
+        smtp_time = Stopwatch()
+        imap_time = Stopwatch()
+
+        # iterate through recipients:
+        for recipient in recipients:
+
+            # and through senders of course:
+            for sender in senders:
+                # set name for resultset
                 resultname = sender + '->' + recipient
                 results.update({ resultname : {} })
 
                 # if possible startup idler
-                accounts[recipient].start_idle(len(senders)) # we need to overgive the number of senders
+                accounts[recipient].prepare_startup(len(senders)) # we need to overgive the number of senders
 
                 # send the mail by SMTP
                 smtp_time.start()
@@ -464,7 +541,6 @@ if __name__ == "__main__":
                         print "Test-ID: " + test_id
 
                     # Create the stopwatches.
-                    imap_time = Stopwatch()
                     # Receive the mail.
                     imap_time.start()
                     success, stoptime = accounts[recipient].check(test_id)
