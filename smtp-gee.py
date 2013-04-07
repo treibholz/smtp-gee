@@ -57,12 +57,14 @@ class ImapIdler(threading.Thread): # {{{
                                     new_id = response_id[1][0]
                             if self.__debug:
                                 print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
-                            if int(new_id) > 0:
-                                self.parse_new_emails(new_id)
+                            self.parse_new_emails(new_id)
+
                 except:
                     raise
 
     def parse_new_emails(self, new_id):
+        if int(new_id) < self.__last_id or int(new_id) == self.__last_id: # possibly some emails got deleted..
+            self.__last_id == (int(new_id)-1)
         while int(new_id) > self.__last_id and not self.__stop.isSet():
             self.__last_id += 1
             test_id = str(self.__last_id)
@@ -70,15 +72,18 @@ class ImapIdler(threading.Thread): # {{{
             if self.__debug:
                 print "ImapIdler-> parsing mailid: " + test_id
 
-            fetch_header = self.imapobject.fetch(test_id, '(BODY[HEADER.FIELDS subject])')
+            fetch_result, fetch_header = self.imapobject.fetch(test_id, '(BODY[HEADER.FIELDS subject])')
 
             if self.__debug:
                 print 'ImapIdler-> Headers fetched: ' + str(fetch_header)
-            if fetch_header[0] == 'OK' and fetch_header[1][0] != None:
-                if type(fetch_header[1][-3]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
-                    header = fetch_header[1][-3][1]
-                else:
-                    header = fetch_header[1][-3]
+            if fetch_result == 'OK' and fetch_header[0] != None and len(fetch_header) > 2:
+                if fetch_header[-2] == ')': # that is really crazy but the result from fetch....can be strange!
+                    header = fetch_header[-3]
+                elif fetch_header[-1] == ')':
+                    header = fetch_header[-2]
+
+                if type(header).__name__ == 'tuple':
+                    header = header[1]
 
                 if header:
                     substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
@@ -130,7 +135,7 @@ class Account(object): # {{{
 
         # default values
         self.__idler              =   None
-        self.__imap_timeout     =   600
+        self.__imap_timeout     =   300
         self.__debug            =   False
         self.imap_idle          =   False
         self.smtp_over_ssl      =   False
@@ -246,10 +251,21 @@ Cheers.
             for num in data[0].split():
                 typ, data = imapobject.fetch(num, '(RFC822)')
 
-            if type(data[0]).__name__ == 'tuple': # that is really crazy but the result from fetch....can be strange!
+
+            if self.__debug:
+                if len(data) < 2:
+                    print "result is less then 2 elements"
+                    print str(data)
+
+            if data[-1] == ')': # that is really crazy but the result from fetch....can be strange!
+                msg = data[-2][1]
+            elif data[-2] == ')':
+                msg = data[-3][1]
+            else:
+                if self.__debug:
+                    print "Do not know what to use from " + str(data)
+                    print "fallback to data[0][1]"
                 msg = data[0][1]
-            elif type(data[1]).__name__ == 'tuple':
-                msg = data[1][1]
 
             headers = Parser().parsestr(msg)
 
@@ -288,9 +304,9 @@ Cheers.
 
     def set_timeout(self, key, timeout): # {{{
         """set timeout value"""
-        setattr(self, '__' + key + '_timeout', timeout)
+        if key == 'imap': # I have no Idea why i can't do this with setattr...
+            self.__imap_timeout = timeout
     # }}}
-
 
 # }}}
 
