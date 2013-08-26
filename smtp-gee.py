@@ -323,7 +323,7 @@ Cheers.
                     print "Data: " + str(data)
                     data = False
 
-            if data:
+            if data and result:
                 if data[-1] == ')': # we need to search for the correct message...it's one field before the ')' field
                     msg = data[-2][1]
                 elif data[-2] == ')':
@@ -386,7 +386,7 @@ class Stopwatch(object): # {{{
     def __init__(self, debug=False):
         super(Stopwatch, self).__init__()
         self.__debug = debug
-        self.__start   = -1
+        self.__start = -1
         self.counter = 0
 
     def start(self, my_time=time.time()):
@@ -397,8 +397,8 @@ class Stopwatch(object): # {{{
         """stop it. you may set a time here, too"""
         if my_time == None:
             my_time = time.time()
-        self.counter += my_time - self.__start
-        self.__start  = -1
+        self.counter = my_time - self.__start
+        self.__start = -1
 # }}}
 
 if __name__ == "__main__":
@@ -486,14 +486,12 @@ if __name__ == "__main__":
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
 
     args = parser.parse_args()
-
     # }}}
 
     def execute_checks(accounts, all_sender, all_recipient, debug=False): # {{{
         senders = all_sender.split(',')
         recipients = all_recipient.split()
         results = {}
-
 
         if len(senders) == 1 and senders[0] == 'all':
             if senders not in accounts.keys():
@@ -542,7 +540,7 @@ if __name__ == "__main__":
 
                     # Create the stopwatches.
                     # Receive the mail.
-                    imap_time.start()
+                    imap_time.start(time.time())
                     success, stoptime = accounts[recipient].check(test_id)
                     imap_time.stop(stoptime)
                     results[resultname].update({ 'IMAP' : success })
