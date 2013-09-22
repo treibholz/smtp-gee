@@ -6,7 +6,7 @@ import ConfigParser
 import time
 import hashlib
 import socket
-import imaplib2
+import imaplib2.imaplib2
 import argparse
 import sys
 import threading
