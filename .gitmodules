@@ -1,0 +1,3 @@
+[submodule "imaplib2"]
+	path = imaplib2
+	url = git://git.code.sf.net/p/imaplib2/code
