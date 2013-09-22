@@ -71,6 +71,8 @@ class ImapIdler(threading.Thread): # {{{
                                 print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
                             # parse fetched messages
                             self.parse_new_emails(new_id)
+                    else:
+                        print 'ImapIdler-> Did not receive OK...strange'
 
                 except:
                     raise
@@ -119,7 +121,7 @@ class ImapIdler(threading.Thread): # {{{
     def startup(self, nr_of_senders=1):
         if self.__debug:
             print "ImapIdler-> starting up Thread"
-            print "ImapIdler-> will wait for " + str(nr_of_senders) + " senders to complete"
+            print "ImapIdler-> Connection will handle " + str(nr_of_senders) + " senders"
         # start the thread
         self.start()
         self.senders = nr_of_senders
@@ -134,6 +136,7 @@ class ImapIdler(threading.Thread): # {{{
             self.join()
         else:
             if self.__debug:
+                print 'ImapIdler-> one sender finished.'
                 print 'ImapIdler-> waiting for ' + str((self.senders-1)) + ' more senders'
             self.senders -= 1
 
@@ -267,13 +270,15 @@ Cheers.
                         check_now = int(time.time())
                 else:
                     # timeout occured. Stop everything.
+                    if self.__debug:
+                        print "Failed to fetch the Message within timeout...Sorry!"
+
                     if self.senders == 1:
                         # if we have no more senders waiting
                         self.connected = False
                     # decrease sender variable
                     self.senders -= 1
                     self.__idler.stop()
-                    self.__idler.join()
                     return False, None
     # }}}
 
@@ -285,6 +290,7 @@ Cheers.
         if not self.connected:
             if self.__debug:
                 print 'Starting IMAP Connection'
+                print 'Connection will handle ' + str(self.senders) + ' senders'
             self.imapobject = imaplib2.IMAP4_SSL(self.imap_server)
             self.imapobject.login(self.login, self.password)
             self.connected = True
@@ -353,7 +359,7 @@ Cheers.
             self.imapobject.logout()
         else:
             if self.__debug:
-                print "Will wait for " + str(self.senders-1) + " senders to complete"
+                print "IMAP Connection waits for " + str(self.senders-1) + " more senders to complete"
             self.senders -= 1
         # return the results and our timestamp
         return result, timestamp
