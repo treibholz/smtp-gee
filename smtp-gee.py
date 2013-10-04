@@ -639,7 +639,7 @@ if __name__ == "__main__":
                 resultkey, results[resultkey]['IMAP_TIME'],  )
             # }}}
 
-            perfdata += " %s_smtp=%.3f;%.3f;%.3f, %s_imap=%.3f;%.3f;%.3f" % ( resultkey, results[resultkey]['SMTP_TIME'],
+            perfdata += " %s_smtp=%.3f;%.3f;%.3f %s_imap=%.3f;%.3f;%.3f" % ( resultkey, results[resultkey]['SMTP_TIME'],
             args.smtp_warn, args.smtp_crit, resultkey, results[resultkey]['IMAP_TIME'], args.imap_warn, args.imap_crit )
 
     if result == "":
