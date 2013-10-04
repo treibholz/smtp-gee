@@ -15,6 +15,12 @@ import re
 from email.mime.text import MIMEText
 from email.parser import Parser
 
+# Nagios Codes
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
 class ImapIdler(threading.Thread): # {{{
     """This Class is used to create the ImapIdler Object."""
 
@@ -410,7 +416,11 @@ class Stopwatch(object): # {{{
 if __name__ == "__main__":
 
     # fallback returncode
-    returncode = 0
+    returncode = STATE_OK
+
+    # Variables
+    perfdata = ""
+    result = ""
 
     # Parse Options # {{{
     parser = argparse.ArgumentParser(
@@ -525,7 +535,7 @@ if __name__ == "__main__":
             # and through senders of course:
             for sender in senders:
                 # set name for resultset
-                resultname = sender + '->' + recipient
+                resultname = sender + '-to-' + recipient
                 results.update({ resultname : {} })
 
                 # if possible startup idler
@@ -551,6 +561,13 @@ if __name__ == "__main__":
                     imap_time.stop(stoptime)
                     results[resultname].update({ 'IMAP' : success })
                     results[resultname].update({ 'IMAP_TIME' : imap_time.counter })
+                else:
+                    results[resultname].update({ 'SMTP' : False })
+                    results[resultname].update({ 'ID' : "unknown" })
+                    results[resultname].update({ 'SMTP_TIME' : smtp_time.counter })
+                    results[resultname].update({ 'IMAP' : True })
+                    results[resultname].update({ 'IMAP_TIME' : "0.000" })
+
         return results
     # }}}
 
@@ -569,7 +586,7 @@ if __name__ == "__main__":
             configdict.update({ option : cparser.get(section, option) })
 
         accounts.update({ section : Account(configdict) })
-        
+ 
         accounts[section].set_debug(args.debug)
 
         accounts[section].set_timeout('imap', args.imap_timeout)
@@ -589,37 +606,47 @@ if __name__ == "__main__":
                 print "SMTP, (%s) time to send the mail: %.3f sec." % (resultkey, results[resultkey]['SMTP_TIME'], )
                 print "IMAP, (%s) the mail could not be fetched within %.3f sec." % (resultkey, results[resultkey]['IMAP_TIME'], )
         else:
-
             # Nagios output
             # this could be beautified...
             nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
 
-            if   ((results[resultkey]['SMTP_TIME'] >= args.smtp_crit) or (results[resultkey]['IMAP_TIME'] >= args.imap_crit)):
-                returncode = 2
-            elif ((results[resultkey]['SMTP_TIME'] >= args.smtp_warn) or (results[resultkey]['IMAP_TIME'] >= args.imap_warn)):
-                if returncode < 1:
-                    returncode = 1
+            # Nagios output {{{
+            if not results[resultkey]['SMTP']: 
+                returncode = STATE_CRITICAL
+                result += "%s: (%s) SMTP failed in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['SMTP_TIME'], )
+            elif (results[resultkey]['SMTP_TIME'] >= args.smtp_crit):
+                returncode = STATE_CRITICAL
+                result += "%s: (%s) SMTP in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['SMTP_TIME'], )
+            elif (results[resultkey]['SMTP_TIME'] >= args.smtp_warn):
+                returncode = STATE_WARNING
+                result += "%s: (%s) SMTP in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['SMTP_TIME'], )
 
-            if results[resultkey]['SMTP'] or not results[resultkey]['IMAP']: # if it failed
-                returncode = 2
-                nagios_template="%s: (%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
-            else:
-                nagios_template="%s: (%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            if not results[resultkey]['IMAP']:
+                returncode = STATE_CRITICAL
+                result += "%s: (%s) IMAP NOT received in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['IMAP_TIME'],  )
+            elif (results[resultkey]['IMAP_TIME'] >= args.imap_crit):
+                returncode = STATE_CRITICAL
+                result += "%s: (%s) IMAP received in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['IMAP_TIME'],  )
+            elif (results[resultkey]['IMAP_TIME'] >= args.imap_warn):
+                if returncode < STATE_CRITICAL:
+                    returncode = STATE_WARNING
+                result += "%s: (%s) IMAP received in %.3f sec " % ( nagios_code[returncode], 
+                resultkey, results[resultkey]['IMAP_TIME'],  )
+            # }}}
 
-            print nagios_template % (
-                nagios_code[returncode],
-                resultkey,
-                results[resultkey]['SMTP_TIME'],
-                results[resultkey]['IMAP_TIME'],
-                results[resultkey]['SMTP_TIME'],
-                args.smtp_warn,
-                args.smtp_crit,
-                results[resultkey]['IMAP_TIME'],
-                args.imap_warn,
-                args.imap_crit,
-            )
+            perfdata += " %s_smtp=%.3f;%.3f;%.3f, %s_imap=%.3f;%.3f;%.3f" % ( resultkey, results[resultkey]['SMTP_TIME'],
+            args.smtp_warn, args.smtp_crit, resultkey, results[resultkey]['IMAP_TIME'], args.imap_warn, args.imap_crit )
+
+    if result == "":
+        result = "OK: all tests were successfull "
 
     if args.nagios:
+        print result + "|" + perfdata
         sys.exit(returncode)
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
