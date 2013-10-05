@@ -11,6 +11,7 @@ import argparse
 import sys
 import threading
 import re
+import csv
 
 from email.mime.text import MIMEText
 from email.parser import Parser
@@ -439,10 +440,10 @@ if __name__ == "__main__":
                     metavar="<name>|<name,name>,all",
                     help='The account(s) to receive the message on (must be comma separated for lists)')
 
-    main_parser_group.add_argument('--nagios', dest='nagios', action='store_true',
+    main_parser_group.add_argument('--output-mode', dest='outputmode', action='store',
                     required=False,
-                    default=False,
-                    help='output in Nagios mode')
+                    default='plain',
+                    help='output mode (plain, nagios, csv)')
 
     main_parser_group.add_argument('--debug', dest='debug', action='store_true',
                     required=False,
@@ -455,8 +456,29 @@ if __name__ == "__main__":
                     required=False,
                     help='alternate config-file')
 
+    main_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
+                    required=False,
+                    default=60,
+                    metavar="<sec>",
+                    type=int,
+                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
 
-    smtp_parser_group = parser.add_argument_group('SMTP options')
+    main_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
+                    required=False,
+                    default=300,
+                    metavar="<sec>",
+                    type=int,
+                    help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
+
+    csv_parser_group =  parser.add_argument_group('CSV options')
+    csv_parser_group.add_argument('--outputfile', dest='outputfile', action='store',
+                    required=False,
+                    default="smtp-gee.csv",
+                    metavar="FILE",
+                    help='File to write CSV output to')
+
+
+    smtp_parser_group = parser.add_argument_group('SMTP options for plain and nagios output')
     smtp_parser_group.add_argument('--smtp_warn', dest='smtp_warn', action='store',
                     required=False,
                     default=15,
@@ -471,15 +493,7 @@ if __name__ == "__main__":
                     type=int,
                     help='critical threshold to send the mail. Default: %(default)s')
 
-    smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
-                    required=False,
-                    default=60,
-                    metavar="<sec>",
-                    type=int,
-                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
-
-
-    imap_parser_group = parser.add_argument_group('IMAP options')
+    imap_parser_group = parser.add_argument_group('IMAP options for plain and nagios output')
     imap_parser_group.add_argument('--imap_warn', dest='imap_warn', action='store',
                     required=False,
                     default=120,
@@ -493,13 +507,6 @@ if __name__ == "__main__":
                     metavar="<sec>",
                     type=int,
                     help='critical threshold until the mail appears in the INBOX. Default: %(default)s')
-
-    imap_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
-                    required=False,
-                    default=300,
-                    metavar="<sec>",
-                    type=int,
-                    help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
 
     args = parser.parse_args()
     # }}}
@@ -594,18 +601,31 @@ if __name__ == "__main__":
 
     ### get the results
     results = execute_checks(accounts, args.sender, args.rcpt)
+    resultlist = []
 
     # present the results
     for resultkey in results.keys():
-        if not args.nagios:
-            if results[resultkey]['SMTP'] and results[resultkey]['IMAP']:
-                # Default output
-                print "SMTP, (%s) time to send the mail: %.3f sec." % (resultkey, results[resultkey]['SMTP_TIME'], )
-                print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (resultkey, results[resultkey]['IMAP_TIME'], )
+        if args.outputmode == 'plain':
+            if not results[resultkey]['SMTP']:
+                print "SMTP (%s) failed" % ( resultkey )
+                continue
+            elif (results[resultkey]['SMTP_TIME'] >= args.smtp_crit):
+                print "CRITICAL: SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
+            elif (results[resultkey]['SMTP_TIME'] >= args.smtp_warn):
+                print "WARNING: SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
             else:
-                print "SMTP, (%s) time to send the mail: %.3f sec." % (resultkey, results[resultkey]['SMTP_TIME'], )
-                print "IMAP, (%s) the mail could not be fetched within %.3f sec." % (resultkey, results[resultkey]['IMAP_TIME'], )
-        else:
+                print "SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
+
+            if not results[resultkey]['IMAP']:
+                print "IMAP (%s) failed. the mail could not be fetched within %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+            elif (results[resultkey]['IMAP_TIME'] >= args.imap_crit):
+                print "CRITICAL: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+            elif (results[resultkey]['IMAP_TIME'] >= args.imap_warn):
+                print "WARNING: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+            else:
+                print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+
+        elif args.outputmode == 'plain':
             # Nagios output
             # this could be beautified...
             nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
@@ -642,11 +662,21 @@ if __name__ == "__main__":
             perfdata += " %s_smtp=%.3f;%.3f;%.3f %s_imap=%.3f;%.3f;%.3f" % ( resultkey, results[resultkey]['SMTP_TIME'],
             args.smtp_warn, args.smtp_crit, resultkey, results[resultkey]['IMAP_TIME'], args.imap_warn, args.imap_crit )
 
-    if result == "":
-        result = "OK: all tests were successfull "
+        elif args.outputmode == 'csv':
+            resultlist.append({ 'name' : resultkey, 'SMTP_TIME' : results[resultkey]['SMTP_TIME'], 'IMAP_TIME' : results[resultkey]['IMAP_TIME'], 
+                'SMTP_SUCCESS' : results[resultkey]['SMTP'], 'IMAP_SUCCESS' : results[resultkey]['IMAP'] })
 
-    if args.nagios:
+    if args.outputmode == 'nagios':
+        if result == "":
+            result = "OK: all tests were successfull "
         print result + "|" + perfdata
         sys.exit(returncode)
+    elif args.outputmode == 'csv':
+        with open(args.outputfile, 'wb') as f:
+        # Using dictionary keys as fieldnames for the CSV file header
+            writer = csv.DictWriter(f, resultlist[0].keys())
+            writer.writeheader()
+            for d in resultlist:
+               writer.writerow(d)
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
