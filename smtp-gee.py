@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+"""Super Mail Test Professional - Gold (Enterprise Edition)"""
 
 import smtplib
 import ConfigParser
@@ -17,10 +18,10 @@ from email.mime.text import MIMEText
 from email.parser import Parser
 
 # Nagios Codes
-STATE_OK=0
-STATE_WARNING=1
-STATE_CRITICAL=2
-STATE_UNKNOWN=3
+STATE_OK = 0
+STATE_WARNING = 1
+STATE_CRITICAL = 2
+STATE_UNKNOWN = 3
 
 class ImapIdler(threading.Thread): # {{{
     """This Class is used to create the ImapIdler Object."""
@@ -46,7 +47,7 @@ class ImapIdler(threading.Thread): # {{{
     def run(self): # {{{
         """we override the run method from threading.Thread so it knows what to do."""
         # get last id available
-        self.__last_id = int(self.imapobject.select(self.imapfolder)[1][0])
+        start_id = int(self.imapobject.select(self.imapfolder)[1][0])
 
         # well..always do that untill we stop it
         while True:
@@ -61,7 +62,7 @@ class ImapIdler(threading.Thread): # {{{
                     # we finished IDLEING for now
                     if result[0] == 'OK':
                         if self.__debug:
-                            print 'ImapIdler-> Timeout or Event when IDLE!'
+                            print("%s: IMAPIdler-> Timeout or Event when IDLE!" % (str(time.time())))
                         # check if timeout or new event happened
                         if self.imapobject.response('IDLE')[1][0] == None:
                             # try to get EXISTS message untill there are no more
@@ -73,35 +74,37 @@ class ImapIdler(threading.Thread): # {{{
                                     break
                                 # if the new ID is newer overwrite new_id
                                 if int(response_id[1][0]) > int(new_id):
-                                    new_id = response_id[1][0]
+                                    end_id = response_id[1][0]
                             if self.__debug:
-                                print 'ImapIdler-> IMAP-EXISTS-response: ' + str(new_id)
+                                print("%s: IMAPIdler-> IMAP-EXISTS-response: %s" % (str(time.time()), str(new_id)))
                             # parse fetched messages
-                            self.parse_new_emails(new_id)
+                            start_id = self.parse_new_emails(start_id, end_id)
                     else:
-                        print 'ImapIdler-> Did not receive OK...strange'
+                        print 'IMAPIdler-> Did not receive OK...strange'
 
                 except:
                     raise
     # }}}
 
-    def parse_new_emails(self, new_id):
+    def parse_new_emails(self, start_id, end_id):
         # reset last_id because possibly some emails got deleted..
-        if int(new_id) < self.__last_id or int(new_id) == self.__last_id: 
-            self.__last_id == (int(new_id)-1)
+        if int(end_id) < start_id or int(end_id) == start_id:
+            start_id = (int(end_id)-1)
         # iterate through messages if we shall not stop yet
-        while int(new_id) > self.__last_id and not self.__stop.isSet():
-            self.__last_id += 1
-            test_id = str(self.__last_id)
+        while int(end_id) > start_id and not self.__stop.isSet():
+            start_id += 1
 
             if self.__debug:
-                print "ImapIdler-> parsing mailid: " + test_id
+                print("%s: IMAPIdler-> parsing mailid: %s" % 
+                        (str(time.time()), str(start_id)))
 
             # fetch the subject from the new message
-            fetch_result, fetch_header = self.imapobject.fetch(test_id, '(BODY[HEADER.FIELDS subject])')
+            fetch_result, fetch_header = self.imapobject.fetch(start_id, 
+                                        '(BODY[HEADER.FIELDS subject])')
 
             if self.__debug:
-                print 'ImapIdler-> Headers fetched: ' + str(fetch_header)
+                print("%s: IMAPIdler-> Headers fetched: %s" % 
+                        (str(time.time()), str(fetch_header)))
             # now we need to check if the subject contains the test-id
             if fetch_result == 'OK' and fetch_header[0] != None and len(fetch_header) > 2:
                 # that is really crazy but the result from fetch....can be strange!
@@ -115,20 +118,23 @@ class ImapIdler(threading.Thread): # {{{
 
                 if header:
                     # do some substitution to get just the test_id
-                    substring = 'Subject: ' + re.sub('\|','\\\|',re.sub('\]','\\\]',re.sub('\[','\\\[',self.subject_prefix)))
-                    my_id = re.sub(substring,'',header.strip())
+                    substring = 'Subject: ' + re.sub('\|', '\\\|', re.sub('\]', '\\\]',
+                                            re.sub('\[', '\\\[', self.subject_prefix)))
+                    my_id = re.sub(substring, '', header.strip())
                     # store the id in a dict with the current timestamp
                     if my_id in self.__result_store:
-                        raise Exception('ImapIdler-> duplicate Mail?')
+                        raise Exception('IMAPIdler-> duplicate Mail?')
                     else:
-                        if self.__debug:
-                            print "ImapIdler-> found id: " + my_id
                         self.__result_store.update({ my_id : time.time() })
+                        if self.__debug:
+                            print("%s: IMAPIdler-> found id: %s" % (str(time.time()), my_id))
+        return start_id
 
     def startup(self, nr_of_senders=1):
         if self.__debug:
-            print "ImapIdler-> starting up Thread"
-            print "ImapIdler-> Connection will handle " + str(nr_of_senders) + " senders"
+            print("%s: IMAPIdler-> starting up Thread" % (str(time.time())))
+            print("%s: IMAPIdler-> Connection will handle %s senders" % 
+                                    (str(time.time()), str(nr_of_senders)))
         # start the thread
         self.start()
         self.senders = nr_of_senders
@@ -137,14 +143,15 @@ class ImapIdler(threading.Thread): # {{{
         # stop the thread if all senders are through
         if self.senders == 1 or force:
             if self.__debug:
-                print "ImapIdler-> stopping Thread now"
+                print("%s: IMAPIdler-> stopping Thread now" % (str(time.time())))
             self.__stop.set()
             self.imapobject.logout()
             self.join()
         else:
             if self.__debug:
-                print 'ImapIdler-> one sender finished.'
-                print 'ImapIdler-> waiting for ' + str((self.senders-1)) + ' more senders'
+                print("%s: IMAPIdler-> one sender finished." % (str(time.time())))
+                print("%s: IMAPIdler-> waiting for %s more senders" % 
+                                (str(time.time()), str((self.senders-1))))
             self.senders -= 1
 
     def get_ids(self):
@@ -162,7 +169,7 @@ class Account(object): # {{{
             self.imap_server    =   configdict['imap_server']
             self.email          =   configdict['email']
         except KeyError, e:
-            print "you need to configure the key " + str(e) + "in configsection " + configdict['name']
+            print("you need to configure the key %s in configsection %s" % ( str(e), configdict['name'] ))
             sys.exit(255)
  
 
@@ -217,10 +224,12 @@ Cheers.
         # create smtp object and send message through
         try:
             if self.smtp_over_ssl:
-                if self.__debug: print "SMTP-over-SSL is used"
+                if self.__debug:
+                    print("%s: SMTP -> SMTP-over-SSL is used" % (str(time.time())))
                 smtp_server = smtplib.SMTP_SSL( self.smtp_server )
             else:
-                if self.__debug: print "SMTP is used"
+                if self.__debug:
+                    print("%s: SMTP -> non-SSL-SMTP is used. trying STARTTLS." % (str(time.time())))
                 smtp_server = smtplib.SMTP( self.smtp_server )
                 smtp_server.starttls()
 
@@ -228,6 +237,8 @@ Cheers.
 
             smtp_server.sendmail( self.email, recipient, msg.as_string() )
             smtp_server.quit()
+            if self.__debug:
+                print("%s: SMTP -> testmessage sent." % (str(time.time())))
 
             # return test_id for fetching the message
             return test_id
@@ -278,7 +289,8 @@ Cheers.
                 else:
                     # timeout occured. Stop everything.
                     if self.__debug:
-                        print "Failed to fetch the Message within timeout...Sorry!"
+                        print("%s: IMAPIdler -> Failed to fetch the Message..." 
+                                                        % (str(time.time())))
 
                     if self.senders == 1:
                         # if we have no more senders waiting
@@ -291,13 +303,14 @@ Cheers.
 
     def ImapSearch(self, check_id): # {{{
         ''' Search for check_id in imapobject'''
-        data=['']
+        data = ['']
 
         # only connect if we are not yet connected
         if not self.connected:
             if self.__debug:
-                print 'Starting IMAP Connection'
-                print 'Connection will handle ' + str(self.senders) + ' senders'
+                print("%s: IMAP -> Starting IMAP Connection" % (str(time.time())))
+                print("%s: IMAP -> Connection will handle %s senders" % 
+                                    (str(time.time()), str(self.senders)))
             self.imapobject = imaplib2.IMAP4_SSL(self.imap_server)
             self.imapobject.login(self.login, self.password)
             self.connected = True
@@ -322,7 +335,8 @@ Cheers.
         else:
             result = False
             if self.__debug:
-                print "Failed to fetch the Message...Sorry!"
+                print("%s: IMAP -> Failed to fetch the Message." % 
+                                                    (str(time.time())))
 
         # the following is just for debug
         if self.__debug:
@@ -332,8 +346,8 @@ Cheers.
                     typ, data = self.imapobject.fetch(num, '(RFC822)')
 
                 if len(data) < 2:
-                    print "HICKUP: result is less then 2 elements?\n->don't know what to do with that...setting data to false"
-                    print "Data: " + str(data)
+                    print("%s: IMAP -> HICKUP: result is less then 2 elements?" % (str(time.time())))
+                    print("%s: IMAP -> Data: %s" % (str(time.time()), str(data)))
                     data = False
 
             if data and result:
@@ -343,17 +357,20 @@ Cheers.
                     msg = data[-3][1]
                 else:
                     if self.__debug:
-                        print "Do not know what to use from " + str(data)
-                        print "fallback to data[0][1]"
+                        print("%s: IMAP -> Do not know what to use from %s" % 
+                                                    (str(time.time()), str(data)))
+                        print("%s: IMAP -> fallback to data[0][1]" % 
+                                                    (str(time.time())))
                     msg = data[0][1]
                 try:
                     headers = Parser().parsestr(msg)
                 except:
-                    print "Error when parsing the message...the message is somehow strange"
+                    print("%s: IMAP -> Error when parsing the message..." % 
+                                                            (str(time.time())))
                 else:
                     for h in headers.get_all('received'):
-                        print "---"
-                        print h.strip('\n')
+                        print("---")
+                        print(h.strip('\n'))
 
         # deleting should be more sophisticated, for debugging...
         #m.store(num, '+FLAGS', '\\Deleted')
@@ -361,12 +378,13 @@ Cheers.
         # just close the imap connection when all senders for this account are done
         if self.senders == 1:
             if self.__debug:
-                print "Closing IMAP Connection"
+                print("%s: IMAP -> Closing IMAP Connection" % (str(time.time())))
             self.imapobject.close()
             self.imapobject.logout()
         else:
             if self.__debug:
-                print "IMAP Connection waits for " + str(self.senders-1) + " more senders to complete"
+                print("%s: IMAP -> Connection waits for %s more senders" % 
+                                    (str(time.time()), str(self.senders-1)))
             self.senders -= 1
         # return the results and our timestamp
         return result, timestamp
@@ -450,7 +468,7 @@ if __name__ == "__main__":
                     default=False,
                     help='Debug mode')
 
-    main_parser_group.add_argument('--config',dest='config_file', action='store',
+    main_parser_group.add_argument('--config', dest='config_file', action='store',
                     default='config.ini',
                     metavar="<file>",
                     required=False,
@@ -513,7 +531,7 @@ if __name__ == "__main__":
 
     def execute_checks(accounts, all_sender, all_recipient, debug=False): # {{{
         senders = all_sender.split(',')
-        recipients = all_recipient.split()
+        recipients = all_recipient.split(',')
         results = {}
 
         if len(senders) == 1 and senders[0] == 'all':
@@ -521,14 +539,14 @@ if __name__ == "__main__":
                 senders = accounts.keys()
             else:
                 if debug:
-                    print "NOTICE: using \"all\" for senders but have that as section in configfile"
+                    print("NOTICE: using \"all\" for senders but have that as section in configfile")
 
         if len(recipients) == 1 and recipients[0] == 'all':
             if recipients not in accounts.keys():
                 recipients = accounts.keys()
             else:
                 if debug:
-                    print "NOTICE: using \"all\" for recipients but have that as section in configfile"
+                    print("NOTICE: using \"all\" for recipients but have that as section in configfile")
 
         ### Here the real work begins  ###
 
@@ -559,7 +577,7 @@ if __name__ == "__main__":
                     results[resultname].update({ 'SMTP_TIME' : smtp_time.counter })
 
                     if args.debug:
-                        print "Test-ID: " + test_id
+                        print("%s: SMTP -> Test-ID: %s" % (str(time.time()), test_id))
 
                     # Create the stopwatches.
                     # Receive the mail.
@@ -610,20 +628,27 @@ if __name__ == "__main__":
                 print "SMTP (%s) failed" % ( resultkey )
                 continue
             elif (results[resultkey]['SMTP_TIME'] >= args.smtp_crit):
-                print "CRITICAL: SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
+                print("CRITICAL: SMTP, (%s) time to send the mail: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['SMTP_TIME'] ))
             elif (results[resultkey]['SMTP_TIME'] >= args.smtp_warn):
-                print "WARNING: SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
+                print("WARNING: SMTP, (%s) time to send the mail: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['SMTP_TIME'] ))
             else:
-                print "SMTP, (%s) time to send the mail: %.3f sec." % ( resultkey, results[resultkey]['SMTP_TIME'] )
+                print("SMTP, (%s) time to send the mail: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['SMTP_TIME'] ))
 
             if not results[resultkey]['IMAP']:
-                print "IMAP (%s) failed. the mail could not be fetched within %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+                print("IMAP (%s) failed. the mail could not be fetched within %.3f sec." % 
+                                    ( resultkey, results[resultkey]['IMAP_TIME'] ))
             elif (results[resultkey]['IMAP_TIME'] >= args.imap_crit):
-                print "CRITICAL: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+                print("CRITICAL: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['IMAP_TIME'] ))
             elif (results[resultkey]['IMAP_TIME'] >= args.imap_warn):
-                print "WARNING: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+                print("WARNING: IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['IMAP_TIME'] ))
             else:
-                print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % ( resultkey, results[resultkey]['IMAP_TIME'] )
+                print("IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % 
+                                    ( resultkey, results[resultkey]['IMAP_TIME'] ))
 
         elif args.outputmode == 'plain':
             # Nagios output
@@ -669,7 +694,7 @@ if __name__ == "__main__":
     if args.outputmode == 'nagios':
         if result == "":
             result = "OK: all tests were successfull "
-        print result + "|" + perfdata
+        print("%s|%s" % (result, perfdata))
         sys.exit(returncode)
     elif args.outputmode == 'csv':
         with open(args.outputfile, 'wb') as f:
@@ -677,6 +702,6 @@ if __name__ == "__main__":
             writer = csv.DictWriter(f, resultlist[0].keys())
             writer.writeheader()
             for d in resultlist:
-               writer.writerow(d)
+                writer.writerow(d)
 
 ## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
