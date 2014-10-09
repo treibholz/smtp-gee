@@ -1,5 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+'''
+This lives in https://github.com/treibholz/smtp-gee
+'''
+
+
 
 import smtplib
 import ConfigParser
