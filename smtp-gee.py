@@ -24,6 +24,8 @@ class Account(object): # {{{
         self.smtp_server    =   smtp_server
         self.imap_server    =   imap_server
         self.email          =   login
+        self.smtp_timeout   =   30
+        self.imap_timeout   =   30
 
         self.__debug        =   False
         self.smtp_over_ssl  =   smtp_over_ssl
@@ -61,10 +63,10 @@ Cheers.
         try:
             if self.smtp_over_ssl:
                 if self.__debug: print "SMTP-over-SSL is used"
-                s = smtplib.SMTP_SSL( self.smtp_server )
+                s = smtplib.SMTP_SSL( self.smtp_server, timeout = self.smtp_timeout)
             else:
                 if self.__debug: print "SMTP is used"
-                s = smtplib.SMTP( self.smtp_server )
+                s = smtplib.SMTP( self.smtp_server, timeout = self.smtp_timeout)
                 s.starttls()
 
             #s.set_debuglevel(2)
@@ -206,30 +208,30 @@ if __name__ == "__main__":
 
     smtp_parser_group.add_argument('--smtp_timeout', dest='smtp_timeout', action='store',
                     required=False,
-                    default=60,
+                    default=30,
                     metavar="<sec>",
                     type=int,
-                    help='timeout to stop sending a mail (not implemented yet). Default: %(default)s')
+                    help='timeout to stop sending a mail. Default: %(default)s')
 
 
     imap_parser_group = parser.add_argument_group('IMAP options')
     imap_parser_group.add_argument('--imap_warn', dest='imap_warn', action='store',
                     required=False,
-                    default=120,
+                    default=20,
                     metavar="<sec>",
                     type=int,
                     help='warning threshold until the mail appears in the INBOX. Default: %(default)s')
 
     imap_parser_group.add_argument('--imap_crit', dest='imap_crit', action='store',
                     required=False,
-                    default=300,
+                    default=30,
                     metavar="<sec>",
                     type=int,
                     help='critical threshold until the mail appears in the INBOX. Default: %(default)s')
 
     imap_parser_group.add_argument('--imap_timeout', dest='imap_timeout', action='store',
                     required=False,
-                    default=600,
+                    default=30,
                     metavar="<sec>",
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
@@ -252,11 +254,13 @@ if __name__ == "__main__":
         a[s].set_debug(args.debug)
 
         # This has to be more easy...
-        a[s].smtp_server = c.get(s, 'smtp_server')
-        a[s].imap_server = c.get(s, 'imap_server')
-        a[s].password    = c.get(s, 'password')
-        a[s].login       = c.get(s, 'login')
-        a[s].email       = c.get(s, 'email')
+        a[s].smtp_server    = c.get(s, 'smtp_server')
+        a[s].imap_server    = c.get(s, 'imap_server')
+        a[s].password       = c.get(s, 'password')
+        a[s].login          = c.get(s, 'login')
+        a[s].email          = c.get(s, 'email')
+        a[s].smtp_timeout   = args.smtp_timeout
+        a[s].imap_timeout   = args.imap_timeout
 
         try:
             a[s].smtp_over_ssl = c.get(s, 'smtp_over_ssl')
