@@ -320,12 +320,12 @@ if __name__ == "__main__":
 
         if not smtp_result: # if it failed
             returncode = 3
-            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         elif not imap_result: # if it failed
             returncode = 3
-            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         else:
-            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f, imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
 
         print nagios_template % (
             nagios_code[returncode],
