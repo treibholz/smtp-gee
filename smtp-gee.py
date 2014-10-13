@@ -120,7 +120,8 @@ Cheers.
                     print h.strip('\n')
 
             # deleting should be more sophisticated, for debugging...
-            #m.store(num, '+FLAGS', '\\Deleted')
+            m.store(num, '+FLAGS', '\\Deleted')
+            m.expunge()
             m.close()
             m.logout()
 
