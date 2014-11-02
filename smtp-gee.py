@@ -18,6 +18,8 @@ import sys
 from email.mime.text import MIMEText
 from email.parser import Parser
 
+socket.setdefaulttimeout(10)
+
 
 class Account(object): # {{{
     """docstring for Account"""
