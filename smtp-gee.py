@@ -90,7 +90,7 @@ Cheers.
 
     # }}}
 
-    def check(self, check_id): # {{{
+    def check(self, check_id, stopwatch=None): # {{{
         """docstring for check"""
 
         try:
@@ -104,6 +104,9 @@ Cheers.
             count = 0
             # Wait until the message is there.
             while data == [b'']:
+                if stopwatch != None:
+                    if stopwatch.gettime() > self.imap_timeout:
+                        return False
                 typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
                 time.sleep(1)
                 count += 1
@@ -139,6 +142,9 @@ class Stopwatch(object): # {{{
         self.__debug = debug
         self.__start   = -1
         self.counter = 0
+
+    def gettime(self):
+        return time.time() - self.__start
 
     def start(self):
         """docstring for start"""
@@ -286,7 +292,7 @@ if __name__ == "__main__":
 
         # Receive the mail.
         imap_time.start()
-        imap_result = a[args.rcpt].check(smtp_result)
+        imap_result = a[args.rcpt].check(smtp_result, stopwatch=imap_time)
         imap_time.stop()
 
 
