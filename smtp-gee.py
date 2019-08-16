@@ -4,21 +4,18 @@
 This lives in https://github.com/treibholz/smtp-gee
 '''
 
-
-
 import smtplib
 import configparser
 import time
 import hashlib
 import socket
-import imaplib
+#import imaplib2 as imaplib
 import argparse
 import sys
 
 from email.mime.text import MIMEText
 
 socket.setdefaulttimeout(10)
-
 
 class Account(object): # {{{
     """docstring for Account"""
@@ -93,37 +90,46 @@ Cheers.
     def check(self, check_id, stopwatch=None): # {{{
         """docstring for check"""
 
-        try:
-            m = imaplib.IMAP4_SSL(self.imap_server)
+        #try:
+        m = imaplib.IMAP4_SSL(self.imap_server)
 
-            m.login(self.login, self.password)
-            m.select()
+        m.login(self.login, self.password)
+        m.select()
 
-            data=[b'']
+        imap_idle = 'IDLE' in imaplib.Commands.keys()
 
-            count = 0
-            # Wait until the message is there.
-            while data == [b'']:
-                if stopwatch != None:
-                    if stopwatch.gettime() > self.imap_timeout:
-                        return False
-                typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+        data = [b'']
+
+        count = 1
+        # Wait until the message is there.
+        while data == [b'']:
+            if stopwatch != None:
+                if stopwatch.gettime() > self.imap_timeout:
+                    return False
+
+            if imap_idle:
+                if count > 1:
+                    # keep sleeping longer
+                    m.idle(count)
+            else:
                 time.sleep(1)
-                count += 1
 
-            for num in data[0].split():
-                typ, _data = m.fetch(num, '(RFC822)')
-                msg = _data[0][1]
+            typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+            count += 1
 
-            # deleting should be more sophisticated, for debugging...
-            m.store(num, '+FLAGS', r'\Deleted')
-            m.expunge()
-            m.close()
-            m.logout()
+        for num in data[0].split():
+            typ, _data = m.fetch(num, '(RFC822)')
+            msg = _data[0][1]
 
-            return True
-        except:
-            return False
+        # deleting should be more sophisticated, for debugging...
+        m.store(num, '+FLAGS', r'\Deleted')
+        m.expunge()
+        m.close()
+        m.logout()
+
+        return True
+        #except:
+        #    return False
 
     # }}}
 
@@ -241,6 +247,11 @@ if __name__ == "__main__":
                     type=int,
                     help='timeout to stop waiting for a mail to appear in the INBOX (not implemented yet). Default: %(default)s')
 
+    imap_parser_group.add_argument('--imaplib2', dest='imaplib2', action='store_true',
+                    required=False,
+                    default=False,
+                    help='use imaplib2 instead of imaplib (=use IMAP IDLE)')
+
 
     args = parser.parse_args()
 
@@ -250,6 +261,11 @@ if __name__ == "__main__":
 
     c = configparser.ConfigParser()
     c.read(args.config_file)
+
+    if args.imaplib2:
+        import imaplib2 as imaplib
+    else:
+        import imaplib
 
     a={}
 
