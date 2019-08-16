@@ -12,6 +12,7 @@ login       = test@gmx.de
 email       = test@gmx.de
 password    = passw0rd
 smtp_server = smtp.gmx.net
+smtp_port   = 25
 imap_server = imap.gmx.net
 
 [yahoo.com]

@@ -22,7 +22,7 @@ socket.setdefaulttimeout(10)
 
 class Account(object): # {{{
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False, smtp_port=587): # {{{
+    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False, smtp_port=25): # {{{
         super(Account, self).__init__()
         self.name           =   name
         self.login          =   login
@@ -261,10 +261,19 @@ if __name__ == "__main__":
         a[s].smtp_timeout   = args.smtp_timeout
         a[s].imap_timeout   = args.imap_timeout
 
+        # FIXME: Really, really Ugly!
+        a[s].smtp_port = 25
         try:
             a[s].smtp_over_ssl = c.get(s, 'smtp_over_ssl')
+            a[s].smtp_port = 465
         except:
             pass
+
+        try:
+            a[s].smtp_port = c.get(s, 'smtp_port')
+        except:
+            pass
+
 
     # }}}
 
