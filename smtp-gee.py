@@ -16,19 +16,19 @@ import argparse
 import sys
 
 from email.mime.text import MIMEText
-from email.parser import Parser
 
 socket.setdefaulttimeout(10)
 
 
 class Account(object): # {{{
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False): # {{{
+    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False, smtp_port=587): # {{{
         super(Account, self).__init__()
         self.name           =   name
         self.login          =   login
         self.password       =   password
         self.smtp_server    =   smtp_server
+        self.smtp_port      =   smtp_port
         self.imap_server    =   imap_server
         self.email          =   login
         self.smtp_timeout   =   30
@@ -70,10 +70,10 @@ Cheers.
         try:
             if self.smtp_over_ssl:
                 if self.__debug: print("SMTP-over-SSL is used")
-                s = smtplib.SMTP_SSL( self.smtp_server, timeout = self.smtp_timeout)
+                s = smtplib.SMTP_SSL( self.smtp_server, port = self.smtp_port, timeout = self.smtp_timeout)
             else:
                 if self.__debug: print("SMTP is used")
-                s = smtplib.SMTP( self.smtp_server, timeout = self.smtp_timeout)
+                s = smtplib.SMTP( self.smtp_server, port = self.smtp_port, timeout = self.smtp_timeout)
                 s.starttls()
 
             #s.set_debuglevel(2)
@@ -99,29 +99,21 @@ Cheers.
             m.login(self.login, self.password)
             m.select()
 
-            data=['']
+            data=[b'']
 
             count = 0
             # Wait until the message is there.
-            while data == ['']:
+            while data == [b'']:
                 typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
                 time.sleep(1)
                 count += 1
 
-
             for num in data[0].split():
-                typ, data = m.fetch(num, '(RFC822)')
-                msg = data[0][1]
-
-            headers = Parser().parsestr(msg)
-
-            if self.__debug:
-                for h in headers.get_all('received'):
-                    print("---")
-                    print(h.strip('\n'))
+                typ, _data = m.fetch(num, '(RFC822)')
+                msg = _data[0][1]
 
             # deleting should be more sophisticated, for debugging...
-            m.store(num, '+FLAGS', '\\Deleted')
+            m.store(num, '+FLAGS', r'\Deleted')
             m.expunge()
             m.close()
             m.logout()
