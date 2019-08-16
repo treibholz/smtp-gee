@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 '''
 This lives in https://github.com/treibholz/smtp-gee
@@ -7,7 +7,7 @@ This lives in https://github.com/treibholz/smtp-gee
 
 
 import smtplib
-import ConfigParser
+import configparser
 import time
 import hashlib
 import socket
@@ -58,7 +58,7 @@ Cheers.
 """ % (socket.getfqdn(), timestamp, self.email, recipient.email, )
 
 
-        test_id = hashlib.sha1(payload).hexdigest()
+        test_id = hashlib.sha1(payload.encode('utf-8')).hexdigest()
 
 
         msg = MIMEText(payload)
@@ -69,10 +69,10 @@ Cheers.
 
         try:
             if self.smtp_over_ssl:
-                if self.__debug: print "SMTP-over-SSL is used"
+                if self.__debug: print("SMTP-over-SSL is used")
                 s = smtplib.SMTP_SSL( self.smtp_server, timeout = self.smtp_timeout)
             else:
-                if self.__debug: print "SMTP is used"
+                if self.__debug: print("SMTP is used")
                 s = smtplib.SMTP( self.smtp_server, timeout = self.smtp_timeout)
                 s.starttls()
 
@@ -111,15 +111,14 @@ Cheers.
 
             for num in data[0].split():
                 typ, data = m.fetch(num, '(RFC822)')
-                # print typ
                 msg = data[0][1]
 
             headers = Parser().parsestr(msg)
 
             if self.__debug:
                 for h in headers.get_all('received'):
-                    print "---"
-                    print h.strip('\n')
+                    print("---")
+                    print(h.strip('\n'))
 
             # deleting should be more sophisticated, for debugging...
             m.store(num, '+FLAGS', '\\Deleted')
@@ -251,7 +250,7 @@ if __name__ == "__main__":
 
     # Read Config {{{
 
-    c = ConfigParser.ConfigParser()
+    c = configparser.ConfigParser()
     c.read(args.config_file)
 
     a={}
@@ -289,7 +288,7 @@ if __name__ == "__main__":
     smtp_time.stop()
 
     if args.debug:
-        print smtp_result
+        print(smtp_result)
 
     if smtp_result:
 
@@ -304,8 +303,8 @@ if __name__ == "__main__":
     if not args.nagios:
 
         # Default output
-        print "SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, )
-        print "IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, )
+        print("SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, ))
+        print("IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, ))
 
     else:
 
@@ -330,7 +329,7 @@ if __name__ == "__main__":
         else:
             nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
 
-        print nagios_template % (
+        print(nagios_template % (
             nagios_code[returncode],
             args.sender,
             args.rcpt,
@@ -342,7 +341,7 @@ if __name__ == "__main__":
             imap_time.counter,
             args.imap_warn,
             args.imap_crit,
-        )
+        ))
 
         sys.exit(returncode)
 
