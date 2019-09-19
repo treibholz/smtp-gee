@@ -36,6 +36,7 @@ class Account(object): # {{{
 
         self.__debug        =   False
         self.smtp_over_ssl  =   smtp_over_ssl
+        self.error_string   =   ""
 
     # }}}
 
@@ -83,8 +84,14 @@ Cheers.
             s.quit()
 
             return test_id
-
+        except smtplib.SMTPAuthenticationError as smtp_error:
+            self.error_string += "SMTPAuthenticationError: {0}".format(smtp_error)
+            return False
+        except smtplib.SMTPConnectError as smtp_error:
+            self.error_string += "SMTPConnectError: {0}".format(smtp_error)
+            return False
         except:
+            self.error_string += "Unexpected error: {0}".format(sys.exc_info())
             return False
 
 
@@ -122,9 +129,12 @@ Cheers.
             m.logout()
 
             return True
-        except:
+        except imaplib.IMAP4.error as imap_error:
+            self.error_string += "IMAP error: {0}".format(imap_error) 
             return False
-
+        except:
+            self.error_string += "Unexpected error: {0}".format(sys.exc_info())
+            return False
     # }}}
 
     def set_debug(self, debug): # {{{
@@ -329,12 +339,15 @@ if __name__ == "__main__":
 
         if not smtp_result: # if it failed
             returncode = 3
-            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            error_string = a[args.sender].error_string
+            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         elif not imap_result: # if it failed
+            error_string = a[args.rcpt].error_string
             returncode = 3
-            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         else:
-            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            error_string=""
+            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec%s|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
 
         print(nagios_template % (
             nagios_code[returncode],
@@ -342,6 +355,7 @@ if __name__ == "__main__":
             args.rcpt,
             smtp_time.counter,
             imap_time.counter,
+            error_string,
             smtp_time.counter,
             args.smtp_warn,
             args.smtp_crit,
