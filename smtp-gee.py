@@ -4,8 +4,6 @@
 This lives in https://github.com/treibholz/smtp-gee
 '''
 
-
-
 import smtplib
 import configparser
 import time
@@ -194,6 +192,12 @@ if __name__ == "__main__":
                     default=False,
                     help='output in Nagios mode')
 
+    main_parser_group.add_argument('--except-means', dest='except_return', action='store',
+                    metavar="<int>",
+                    required=False,
+                    default=2,
+                    help='Map Exceptions to another returncode. Default: %(default)s')
+
     main_parser_group.add_argument('--debug', dest='debug', action='store_true',
                     required=False,
                     default=False,
@@ -338,12 +342,12 @@ if __name__ == "__main__":
             returncode = 0
 
         if not smtp_result: # if it failed
-            returncode = 3
+            returncode = int(args.except_return)
             error_string = a[args.sender].error_string
             nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         elif not imap_result: # if it failed
             error_string = a[args.rcpt].error_string
-            returncode = 3
+            returncode = int(args.except_return)
             nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         else:
             error_string=""
