@@ -20,7 +20,7 @@ socket.setdefaulttimeout(10)
 
 class Account(object): # {{{
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", smtp_over_ssl=False, smtp_port=25): # {{{
+    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", imap_folder="INBOX", smtp_over_ssl=False, smtp_port=25): # {{{
         super(Account, self).__init__()
         self.name           =   name
         self.login          =   login
@@ -28,6 +28,7 @@ class Account(object): # {{{
         self.smtp_server    =   smtp_server
         self.smtp_port      =   smtp_port
         self.imap_server    =   imap_server
+        self.imap_folder    =   imap_folder
         self.email          =   login
         self.smtp_timeout   =   30
         self.imap_timeout   =   30
@@ -35,6 +36,7 @@ class Account(object): # {{{
         self.__debug        =   False
         self.smtp_over_ssl  =   smtp_over_ssl
         self.error_string   =   ""
+        self.current_folder =   ""
 
     # }}}
 
@@ -102,19 +104,26 @@ Cheers.
             m = imaplib.IMAP4_SSL(self.imap_server)
 
             m.login(self.login, self.password)
-            m.select()
 
             data=[b'']
 
-            count = 0
             # Wait until the message is there.
             while data == [b'']:
                 if stopwatch != None:
                     if stopwatch.gettime() > self.imap_timeout:
                         return False
-                typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+                for current_folder in self.imap_folder.split(','):
+                    typ, n = m.select(current_folder)
+                    if typ != "OK":
+                        self.error_string += "Can't select %s: %s" % (current_folder, typ)
+                        return False
+                    if self.__debug:
+                        print("Search in %s %s (%d)" % (current_folder, typ, int(n[0])))
+                    typ, data = m.search(None, 'SUBJECT', '"%s"' % check_id)
+                    if data != [b'']:
+                        self.current_folder = current_folder
+                        break
                 time.sleep(1)
-                count += 1
 
             for num in data[0].split():
                 typ, _data = m.fetch(num, '(RFC822)')
@@ -294,6 +303,11 @@ if __name__ == "__main__":
         except:
             pass
 
+        a[s].imap_folder    = 'INBOX'
+        try:
+            a[s].imap_folder = c.get(s, 'imap_folder')
+        except:
+            pass
 
     # }}}
 
@@ -325,7 +339,7 @@ if __name__ == "__main__":
 
         # Default output
         print("SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, ))
-        print("IMAP, (%s) time until the mail appeared in the destination INBOX: %.3f sec." % (args.rcpt, imap_time.counter, ))
+        print("IMAP, (%s) time until the mail appeared in the destination mailbox/%s: %.3f sec." % (args.rcpt, a[args.rcpt].current_folder, imap_time.counter, ))
 
     else:
 
@@ -336,7 +350,7 @@ if __name__ == "__main__":
 
         if   ((smtp_time.counter >= args.smtp_crit) or (imap_time.counter >= args.imap_crit)):
             returncode = 2
-        elif ((smtp_time.counter >= args.smtp_warn) or (imap_time.counter >= args.imap_warn)):
+        elif ((smtp_time.counter >= args.smtp_warn) or (imap_time.counter >= args.imap_warn) or (a[args.rcpt].current_folder != 'INBOX')):
             returncode = 1
         else:
             returncode = 0
@@ -344,20 +358,21 @@ if __name__ == "__main__":
         if not smtp_result: # if it failed
             returncode = int(args.except_return)
             error_string = a[args.sender].error_string
-            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) SMTP failed in %.3f sec, NOT received %s in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         elif not imap_result: # if it failed
             error_string = a[args.rcpt].error_string
             returncode = int(args.except_return)
-            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) sent in %.3f sec, IMAP failed, NOT received %s in %.3f sec (%s)|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
         else:
             error_string=""
-            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %.3f sec%s|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
+            nagios_template="%s: (%s->%s) sent in %.3f sec, received in %s in %.3f sec%s|smtp=%.3f;%.3f;%.3f imap=%.3f;%.3f;%.3f"
 
         print(nagios_template % (
             nagios_code[returncode],
             args.sender,
             args.rcpt,
             smtp_time.counter,
+            a[args.rcpt].current_folder,
             imap_time.counter,
             error_string,
             smtp_time.counter,
