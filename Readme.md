@@ -43,7 +43,7 @@ Because e-mail is a realtime-medium and you know it!
 
 ### Configuration
 
-see [config.ini.example].
+see [config.ini.example](config.ini.example).
 
 ### Nagios (legacy)
 
@@ -65,7 +65,7 @@ smtp_gee{protocol="IMAP",from="gmx.de",rcpt="web.de",state="success",error_strin
 Following the [KISS principle](https://en.wikipedia.org/wiki/KISS_principle), the idea is to be run by cron like this:
 
 ```crontab
-*/5 * * * * /path/to/smtp-gee.py --config /path/to/config.ini --rcpt web.de --from gmx.de --prometheus > /path/to/prometheus-textfile-collectors/smpt_gee_gmxde_webde.prom
+*/5 * * * * /path/to/smtp-gee.py --config /path/to/config.ini --rcpt web.de --from gmx.de --prometheus | sponge /path/to/prometheus-textfile-collectors/smpt_gee_gmxde_webde.prom
 ``` 
 
 the parameters `--(smtp|imap)_(warn|crit)` are completely useless with `--prometheus`, as the alarming is handled by an alert-manager.
