@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 '''
 This lives in https://github.com/treibholz/smtp-gee
+
+Yes, the code is bad, has mixed styles and I also want to burn it, rewrite
+everything from scratch, but I don't have time for it, so I just add features
+like to a car from the movie Mad Max.
+
+It has to get the job done!
+
 '''
 
 import smtplib
@@ -20,7 +27,7 @@ socket.setdefaulttimeout(10)
 
 class Account(object):
     """docstring for Account"""
-    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", imap_folder="INBOX", smtp_over_ssl=False, smtp_port=25): # {{{
+    def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", imap_folder="INBOX", smtp_over_ssl=False, smtp_port=25):
         super(Account, self).__init__()
         self.name           =   name
         self.login          =   login
@@ -54,6 +61,9 @@ sent to:   %s
 Cheers.
     SMTP-GEE
 
+-- 
+https://github.com/treibholz/smtp-gee
+
 """ % (socket.getfqdn(), timestamp, self.email, recipient.email, )
 
         test_id = hashlib.sha1(payload.encode('utf-8')).hexdigest()
@@ -81,13 +91,13 @@ Cheers.
 
             return test_id
         except smtplib.SMTPAuthenticationError as smtp_error:
-            self.error_string += "SMTPAuthenticationError: {0}".format(smtp_error)
+            self.error_string += f"SMTPAuthenticationError: {smtp_error}"
             return False
         except smtplib.SMTPConnectError as smtp_error:
-            self.error_string += "SMTPConnectError: {0}".format(smtp_error)
+            self.error_string += f"SMTPConnectError: {smtp_error}"
             return False
         except:
-            self.error_string += "Unexpected error: {0}".format(sys.exc_info())
+            self.error_string += f"Unexpected error: {sys.exc_info()}"
             return False
 
     def check(self, check_id, stopwatch=None):
@@ -108,7 +118,7 @@ Cheers.
                 for current_folder in self.imap_folder.split(','):
                     typ, n = m.select(current_folder)
                     if typ != "OK":
-                        self.error_string += "Can't select %s: %s" % (current_folder, typ)
+                        self.error_string += "Can't select {current_folder}: {typ}"
                         return False
                     if self.__debug:
                         print("Search in %s %s (%d)" % (current_folder, typ, int(n[0])))
@@ -130,10 +140,10 @@ Cheers.
 
             return True
         except imaplib.IMAP4.error as imap_error:
-            self.error_string += "IMAP error: {0}".format(imap_error) 
+            self.error_string += f"IMAP error: {imap_error}"
             return False
         except:
-            self.error_string += "Unexpected error: {0}".format(sys.exc_info())
+            self.error_string += f"Unexpected error: {sys.exc_info()}"
             return False
 
     def set_debug(self, debug):
@@ -187,6 +197,12 @@ if __name__ == "__main__":
                     required=False,
                     default=False,
                     help='output in Nagios mode')
+
+    main_parser_group.add_argument('--prometheus', dest='prometheus', action='store_true',
+                    required=False,
+                    default=False,
+                    help='output in Prometheus mode')
+
 
     main_parser_group.add_argument('--except-means', dest='except_return', action='store',
                     metavar="<int>",
@@ -306,8 +322,9 @@ if __name__ == "__main__":
     smtp_time.stop()
 
     if args.debug:
-        print(smtp_result)
+        print(f'smtp_result: {smtp_result}')
 
+    imap_result = False
     if smtp_result:
 
         # Receive the mail.
@@ -315,10 +332,32 @@ if __name__ == "__main__":
         imap_result = a[args.rcpt].check(smtp_result, stopwatch=imap_time)
         imap_time.stop()
 
+    if args.debug:
+        print(f'imap_result: {imap_result}')
+
 
     ### Present the results
 
-    if not args.nagios:
+    if args.prometheus:
+        if imap_result:
+            imap_state="success"
+        elif imap_time.counter >= args.imap_timeout:
+            imap_state="timeout"
+        else:
+            imap_state="error"
+        if smtp_result:
+            smtp_state="success"
+        elif smtp_time.counter >= args.smtp_timeout:
+            smtp_state="timeout"
+        else:
+            smtp_state="error"
+
+        print('# HELP smtp_gee exports metrics about SMTP and IMAP duration')
+        print('# TYPE smtp_gee gauge')
+        print(f'smtp_gee{{protocol="SMTP",from="{args.sender}",rcpt="{args.rcpt}",state="{smtp_state}",error_string="{a[args.sender].error_string}"}} {smtp_time.counter}')
+        print(f'smtp_gee{{protocol="IMAP",from="{args.sender}",rcpt="{args.rcpt}",state="{imap_state}",error_string="{a[args.rcpt].error_string}",folder="{a[args.rcpt].current_folder}"}} {imap_time.counter}')
+
+    elif not args.nagios:
 
         # Default output
         print("SMTP, (%s) time to send the mail: %.3f sec." % (args.sender, smtp_time.counter, ))
@@ -328,6 +367,7 @@ if __name__ == "__main__":
 
         # Nagios output
         # this could be beautified...
+        # ...or removed.. Use Prometheus, all the cool kids are doing it!
 
         nagios_code = ('OK', 'WARNING', 'CRITICAL', 'UNKNOWN' )
 
@@ -368,4 +408,4 @@ if __name__ == "__main__":
 
         sys.exit(returncode)
 
-## vim:fdm=marker:ts=4:sw=4:sts=4:ai:sta:et
+## vim:ts=4:sw=4:sts=4:ai:sta:et
