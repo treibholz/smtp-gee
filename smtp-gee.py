@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
 This lives in https://github.com/treibholz/smtp-gee
@@ -18,7 +18,7 @@ from email.mime.text import MIMEText
 socket.setdefaulttimeout(10)
 
 
-class Account(object): # {{{
+class Account(object):
     """docstring for Account"""
     def __init__(self, name, login=False, password=False, smtp_server="localhost", imap_server="localhost", imap_folder="INBOX", smtp_over_ssl=False, smtp_port=25): # {{{
         super(Account, self).__init__()
@@ -38,9 +38,7 @@ class Account(object): # {{{
         self.error_string   =   ""
         self.current_folder =   ""
 
-    # }}}
-
-    def send(self, recipient): # {{{
+    def send(self, recipient):
         """docstring for send"""
 
         timestamp = time.time()
@@ -58,9 +56,7 @@ Cheers.
 
 """ % (socket.getfqdn(), timestamp, self.email, recipient.email, )
 
-
         test_id = hashlib.sha1(payload.encode('utf-8')).hexdigest()
-
 
         msg = MIMEText(payload)
 
@@ -94,10 +90,7 @@ Cheers.
             self.error_string += "Unexpected error: {0}".format(sys.exc_info())
             return False
 
-
-    # }}}
-
-    def check(self, check_id, stopwatch=None): # {{{
+    def check(self, check_id, stopwatch=None):
         """docstring for check"""
 
         try:
@@ -142,17 +135,12 @@ Cheers.
         except:
             self.error_string += "Unexpected error: {0}".format(sys.exc_info())
             return False
-    # }}}
 
-    def set_debug(self, debug): # {{{
+    def set_debug(self, debug):
         """docstring for set_debug"""
         self.__debug = debug
 
-    # }}}
-
-# }}}
-
-class Stopwatch(object): # {{{
+class Stopwatch(object):
     """docstring for Stopwatch"""
     def __init__(self, debug=False):
         super(Stopwatch, self).__init__()
@@ -172,14 +160,13 @@ class Stopwatch(object): # {{{
         self.counter += time.time() - self.__start
         self.__start  = -1
 
-# }}}
+
 
 if __name__ == "__main__":
 
     # fallback returncode
     returncode = 3
 
-    # Parse Options # {{{
     parser = argparse.ArgumentParser(
         description='Check how long it takes to send a mail (by SMTP) and how long it takes to find it in the IMAP-inbox',
         epilog = "Because e-mail is a realtime-medium and you know it!")
@@ -267,9 +254,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # }}}
-
-    # Read Config {{{
+    # Read Config
 
     c = configparser.ConfigParser()
     c.read(args.config_file)
@@ -308,8 +293,6 @@ if __name__ == "__main__":
             a[s].imap_folder = c.get(s, 'imap_folder')
         except:
             pass
-
-    # }}}
 
     ### Here the real work begins  ###
 
