@@ -22,7 +22,7 @@ import sys
 
 from email.mime.text import MIMEText
 
-socket.setdefaulttimeout(10)
+socket.setdefaulttimeout(300)
 
 
 class Account(object):
